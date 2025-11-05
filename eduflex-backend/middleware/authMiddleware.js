@@ -11,7 +11,7 @@ const authenticate = async (req, res, next) => {
     }
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = { id: decoded.id, role: decoded.role }; // Attach user id and role
+    req.user = { id: decoded.id, role: decoded.role.toLowerCase() }; // Attach user id and role
     next();
   } catch (err) {
     console.error('authMiddleware error', err);
@@ -21,11 +21,20 @@ const authenticate = async (req, res, next) => {
 
 const authorize = (...roles) => {
   return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
+    if (!req.user?.role) {
+      return res.status(403).json({ error: 'Role not found in token' });
+    }
+
+    const userRole = req.user.role.toLowerCase();
+    const allowedRoles = roles.map(r => r.toLowerCase());
+
+    if (!allowedRoles.includes(userRole)) {
       return res.status(403).json({ error: 'User role not authorized' });
     }
+
     next();
   };
 };
+
 
 module.exports = { authenticate, authorize };

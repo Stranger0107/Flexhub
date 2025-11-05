@@ -3,8 +3,7 @@ const User = require('../models/User');
 const Course = require('../models/Course');
 const Assignment = require('../models/Assignment');
 
-// @desc    Get professor's dashboard data
-// @route   GET /api/professor/dashboard
+// Dashboard
 const getProfessorDashboard = async (req, res) => {
   try {
     const courses = await Course.find({ professor: req.user.id }).populate('students', 'name');
@@ -16,8 +15,7 @@ const getProfessorDashboard = async (req, res) => {
   }
 };
 
-// @desc    Get all courses for the logged-in professor
-// @route   GET /api/professor/courses
+// My Courses
 const getMyCourses = async (req, res) => {
   try {
     const courses = await Course.find({ professor: req.user.id }).populate('students', 'name email');
@@ -28,8 +26,7 @@ const getMyCourses = async (req, res) => {
   }
 };
 
-// @desc    Get all assignments for the logged-in professor
-// @route   GET /api/professor/assignments
+// My Assignments
 const getMyAssignments = async (req, res) => {
   try {
     const courses = await Course.find({ professor: req.user.id }).select('_id');
@@ -44,8 +41,7 @@ const getMyAssignments = async (req, res) => {
   }
 };
 
-// @desc    Get a single course by ID
-// @route   GET /api/professor/courses/:id
+// Single Course
 const getCourseById = async (req, res) => {
   try {
     const course = await Course.findOne({
@@ -53,9 +49,8 @@ const getCourseById = async (req, res) => {
       professor: req.user.id
     }).populate('students', 'name email');
     
-    if (!course) {
-      return res.status(404).json({ message: 'Course not found or you do not teach this course' });
-    }
+    if (!course) return res.status(404).json({ message: 'Course not found' });
+
     res.json(course);
   } catch (err) {
     console.error(err);
@@ -63,25 +58,25 @@ const getCourseById = async (req, res) => {
   }
 };
 
-// @desc    Professor grades an assignment submission
-// @route   POST /api/professor/assignments/:id/grade
+// Grade Assignment
 const gradeAssignment = async (req, res) => {
   try {
     const { studentId, grade, feedback } = req.body;
     const assignment = await Assignment.findById(req.params.id);
-    if (!assignment) {
-      return res.status(404).json({ message: 'Assignment not found' });
-    }
+
+    if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
+
     const submission = assignment.submissions.find(
       (sub) => sub.student.toString() === studentId
     );
-    if (!submission) {
-      return res.status(404).json({ message: 'Submission not found' });
-    }
+
+    if (!submission) return res.status(404).json({ message: 'Submission not found' });
+
     submission.grade = grade;
     submission.feedback = feedback;
     submission.gradedAt = Date.now();
     await assignment.save();
+
     res.json(assignment);
   } catch (err) {
     console.error(err);
@@ -89,47 +84,36 @@ const gradeAssignment = async (req, res) => {
   }
 };
 
-// @desc    Professor updates their profile
-// @route   PUT /api/professor/profile
+// Update Profile
 const updateProfessorProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    if (user) {
-      user.name = req.body.name || user.name;
-      user.email = req.body.email || user.email;
-      user.phone = req.body.phone || user.phone;
-      const updatedUser = await user.save();
-      res.json({
-        _id: updatedUser._id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        role: updatedUser.role,
-        phone: updatedUser.phone
-      });
-    } else {
-      res.status(404).json({ message: 'User not found' });
-    }
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    user.name = req.body.name || user.name;
+    user.email = req.body.email || user.email;
+    user.phone = req.body.phone || user.phone;
+
+    const updatedUser = await user.save();
+    res.json(updatedUser);
+
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-// --- NEW FUNCTION TO CREATE COURSE ---
-// @desc    Professor creates a new course
-// @route   POST /api/professor/courses
-// @access  Private (Professor)
+// Create Course
 const createCourse = async (req, res) => {
   try {
-    const { title, description } = req.body; 
+    const { title, description } = req.body;
 
-    if (!title || !description) {
+    if (!title || !description)
       return res.status(400).json({ message: 'Title and description are required' });
-    }
 
     const newCourse = new Course({
       title,
       description,
-      professor: req.user.id 
+      professor: req.user.id
     });
 
     const createdCourse = await newCourse.save();
@@ -140,21 +124,15 @@ const createCourse = async (req, res) => {
   }
 };
 
-// --- NEW FUNCTION TO UPDATE COURSE ---
-// @desc    Professor updates their own course
-// @route   PUT /api/professor/courses/:id
-// @access  Private (Professor)
+// Update Course
 const updateCourse = async (req, res) => {
   try {
     const { title, description } = req.body;
     const course = await Course.findById(req.params.id);
 
-    if (!course) {
-      return res.status(404).json({ message: 'Course not found' });
-    }
-    if (course.professor.toString() !== req.user.id) {
-      return res.status(401).json({ message: 'Not authorized to edit this course' });
-    }
+    if (!course) return res.status(404).json({ message: 'Course not found' });
+    if (course.professor.toString() !== req.user.id)
+      return res.status(401).json({ message: 'Not authorized' });
 
     course.title = title || course.title;
     course.description = description || course.description;
@@ -167,32 +145,24 @@ const updateCourse = async (req, res) => {
   }
 };
 
-// --- NEW FUNCTION TO DELETE COURSE ---
-// @desc    Professor deletes their own course
-// @route   DELETE /api/professor/courses/:id
-// @access  Private (Professor)
+// Delete Course
 const deleteCourse = async (req, res) => {
   try {
     const course = await Course.findById(req.params.id);
-
-    if (!course) {
-      return res.status(404).json({ message: 'Course not found' });
-    }
-    if (course.professor.toString() !== req.user.id) {
-      return res.status(401).json({ message: 'Not authorized to delete this course' });
-    }
+    if (!course) return res.status(404).json({ message: 'Course not found' });
+    if (course.professor.toString() !== req.user.id)
+      return res.status(401).json({ message: 'Not authorized' });
 
     await Assignment.deleteMany({ course: course._id });
     await course.deleteOne();
     
-    res.json({ message: 'Course and associated assignments removed' });
+    res.json({ message: 'Course and related assignments deleted' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error deleting course' });
   }
 };
 
-// Export all functions needed by your router
 module.exports = {
   getProfessorDashboard,
   getMyCourses,
@@ -200,7 +170,7 @@ module.exports = {
   getCourseById,
   gradeAssignment,
   updateProfessorProfile,
-  createCourse, 
-  updateCourse, 
+  createCourse,
+  updateCourse,
   deleteCourse
 };

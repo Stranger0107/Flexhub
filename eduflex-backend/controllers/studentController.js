@@ -1,83 +1,123 @@
+// controllers/studentController.js
 const Course = require('../models/Course');
 const Assignment = require('../models/Assignment');
 
-// @desc    Get all courses a student is enrolled in
-// @route   GET /api/student/courses
-// @access  Private (Student)
 const getMyCourses = async (req, res) => {
   try {
-    const courses = await Course.find({ students: req.user.id });
+    const courses = await Course.find({ students: req.user.id })
+      .populate('professor', 'name email')
+      .select('title description professor');
+
     res.json(courses);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error fetching courses' });
   }
 };
 
-// @desc    Get all assignments for a specific course
-// @route   GET /api/student/assignments/:courseId
-// @access  Private (Student)
 const getCourseAssignments = async (req, res) => {
   try {
-    const assignments = await Assignment.find({ course: req.params.courseId });
+    const course = await Course.findById(req.params.courseId);
+    if (!course) return res.status(404).json({ message: 'Course not found' });
+
+    if (!course.students.map(s => s.toString()).includes(req.user.id))
+      return res.status(403).json({ message: 'You are not enrolled in this course' });
+
+    const assignments = await Assignment.find({ course: req.params.courseId })
+      .select('title description dueDate submissions');
+
     res.json(assignments);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error fetching assignments' });
   }
 };
 
-// @desc    Submit work for an assignment
-// @route   POST /api/student/assignments/:assignmentId/submit
-// @access  Private (Student)
 const submitAssignment = async (req, res) => {
   try {
-    const { submission } = req.body; // e.g., file URL or text
+    const { submission } = req.body;
+
     const assignment = await Assignment.findById(req.params.assignmentId);
     if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
 
-    // Check if student is enrolled in the course
     const course = await Course.findById(assignment.course);
-    if (!course.students.includes(req.user.id)) return res.status(403).json({ message: 'Not enrolled in this course' });
 
-    // Add or update submission
-    const existingSubmissionIndex = assignment.submissions.findIndex(s => s.student.equals(req.user.id));
-    if (existingSubmissionIndex !== -1) {
-      assignment.submissions[existingSubmissionIndex].submission = submission;
+    if (!course.students.map(s => s.toString()).includes(req.user.id))
+      return res.status(403).json({ message: 'Not enrolled in this course' });
+
+    const existing = assignment.submissions.find(s => s.student.toString() === req.user.id);
+
+    if (existing) {
+      existing.submission = submission;
+      existing.submittedAt = Date.now();
     } else {
-      assignment.submissions.push({ student: req.user.id, submission: submission });
+      assignment.submissions.push({
+        student: req.user.id,
+        submission,
+        submittedAt: Date.now()
+      });
     }
 
     await assignment.save();
-    res.json({ message: 'Submission saved', assignment });
+    res.json({ message: 'Submission successful', assignment });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error submitting assignment' });
   }
 };
 
-// @desc    View all my grades
-// @route   GET /api/student/grades
-// @access  Private (Student)
 const getMyGrades = async (req, res) => {
   try {
     const assignments = await Assignment.find({ 'submissions.student': req.user.id })
       .populate('course', 'title');
-      
+
     const grades = assignments.map(a => {
-      const sub = a.submissions.find(s => s.student.equals(req.user.id));
+      const studentSubmission = a.submissions.find(s => s.student.toString() === req.user.id);
       return {
         assignmentId: a._id,
         assignmentTitle: a.title,
-        course: a.course.title, // 'a.course.name' was a bug, Course model has 'title'
-        grade: sub.grade || null,
-        submitted: sub.submission ? true : false
+        course: a.course.title,
+        grade: studentSubmission?.grade ?? null,
+        submitted: !!studentSubmission?.submission,
+        feedback: studentSubmission?.feedback ?? null
       };
     });
+
     res.json(grades);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error fetching grades' });
+  }
+};
+
+const getAllCourses = async (req, res) => {
+  try {
+    const courses = await Course.find()
+      .populate('professor', 'name email')
+      .select('title description professor');
+
+    res.json(courses);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error fetching course list' });
+  }
+};
+
+const enrollInCourse = async (req, res) => {
+  try {
+    const course = await Course.findById(req.params.id);
+    if (!course) return res.status(404).json({ message: 'Course not found' });
+
+    if (course.students.map(s => s.toString()).includes(req.user.id))
+      return res.status(400).json({ message: 'Already enrolled in this course' });
+
+    course.students.push(req.user.id);
+    await course.save();
+
+    res.json({ message: 'Successfully enrolled', course });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error enrolling in course' });
   }
 };
 
@@ -85,5 +125,7 @@ module.exports = {
   getMyCourses,
   getCourseAssignments,
   submitAssignment,
-  getMyGrades
+  getMyGrades,
+  getAllCourses,
+  enrollInCourse
 };
