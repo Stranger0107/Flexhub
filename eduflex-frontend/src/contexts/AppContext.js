@@ -15,7 +15,9 @@ export const AppProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem('authToken'));
   const [authLoading, setAuthLoading] = useState(true);
 
-  // --- AUTH FUNCTIONS ---
+  // =============================
+  // 🔐 AUTH FUNCTIONS
+  // =============================
   const loginUser = async (email, password) => {
     setAuthLoading(true);
     try {
@@ -65,7 +67,9 @@ export const AppProvider = ({ children }) => {
           localStorage.removeItem('currentUser');
         }
         try {
-          const { data } = await api.get('/auth/me');
+          const { data } = await api.get('/auth/me', {
+            headers: { Authorization: `Bearer ${storedToken}` },
+          });
           setUser(data);
           localStorage.setItem('currentUser', JSON.stringify(data));
         } catch (error) {
@@ -81,45 +85,116 @@ export const AppProvider = ({ children }) => {
     loadInitialUser();
   }, []);
 
-  // --- API FUNCTIONS ---
+  // =============================
+  // 📚 COURSE FUNCTIONS (ALL USERS)
+  // =============================
 
-  // --- General ---
-  const fetchAllCourses = useCallback(async () => {
+    // ✅ Fetch a single course by ID (for CourseDetail)
+  const fetchCourseById = useCallback(async (courseId) => {
     try {
-      const { data } = await api.get('/admin/courses');
+      const { data } = await api.get(`/courses/${courseId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       return data;
     } catch (error) {
-      console.error("API: fetchAllCourses failed", error);
-      return [];
+      console.error("API: fetchCourseById failed", error);
+      toast.error("Failed to load course details.");
+      return null;
     }
-  }, []);
+  }, [token]);
 
-  // --- Student ---
-  const fetchMyStudentCourses = useCallback(async () => {
+
+  const getAllCourses = useCallback(async () => {
     try {
-      const { data } = await api.get('/student/courses');
+      const { data } = await api.get('/courses', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       return data;
     } catch (error) {
-      console.error("API: fetchMyStudentCourses failed", error);
+      console.error("API: getAllCourses failed", error);
+      toast.error("Failed to fetch courses.");
       return [];
     }
-  }, []);
+  }, [token]);
+
+  const enrollInCourse = async (courseId) => {
+    try {
+      const { data } = await api.post(`/courses/${courseId}/enroll`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      toast.success("Enrolled successfully!");
+      return data;
+    } catch (error) {
+      console.error("API: enrollInCourse failed", error);
+      toast.error("Failed to enroll in course.");
+      throw error;
+    }
+  };
+
+  const unenrollFromCourse = async (courseId) => {
+    try {
+      const { data } = await api.post(`/courses/${courseId}/unenroll`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      toast.success("Unenrolled successfully!");
+      return data;
+    } catch (error) {
+      console.error("API: unenrollFromCourse failed", error);
+      toast.error("Failed to unenroll from course.");
+      throw error;
+    }
+  };
+
+  // =============================
+  // 🧑‍🎓 STUDENT FUNCTIONS
+  // =============================
+
+  const fetchStudentDashboard = useCallback(async () => {
+    try {
+      const { data } = await api.get('/student/dashboard', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return data; // { totalCourses, pendingAssignments, averageGrade }
+    } catch (error) {
+      console.error("API: fetchStudentDashboard failed", error);
+      toast.error("Failed to load student dashboard.");
+      return { totalCourses: 0, pendingAssignments: 0, averageGrade: 0 };
+    }
+  }, [token]);
+
+  const getMyStudentCourses = useCallback(async () => {
+    try {
+      const { data } = await api.get('/student/courses', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return data;
+    } catch (error) {
+      console.error("API: getMyStudentCourses failed", error);
+      toast.error("Failed to fetch enrolled courses.");
+      return [];
+    }
+  }, [token]);
 
   const fetchMyGrades = useCallback(async () => {
     try {
-      const { data } = await api.get('/student/grades');
+      const { data } = await api.get('/student/grades', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       return data;
     } catch (error) {
       console.error("API: fetchMyGrades failed", error);
+      toast.error("Failed to load grades.");
       return [];
     }
-  }, []);
+  }, [token]);
 
   const submitAssignment = async (assignmentId, submissionText) => {
     try {
-      const { data } = await api.post(`/student/assignments/${assignmentId}/submit`, {
-        submission: submissionText,
-      });
+      const { data } = await api.post(
+        `/student/assignments/${assignmentId}/submit`,
+        { submission: submissionText },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       toast.success("Assignment submitted successfully!");
       return data;
     } catch (error) {
@@ -129,50 +204,62 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // --- Professor ---
+  // =============================
+  // 👨‍🏫 PROFESSOR FUNCTIONS
+  // =============================
   const fetchMyProfessorCourses = useCallback(async () => {
     try {
-      const { data } = await api.get('/professor/courses');
+      const { data } = await api.get('/professor/courses', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       return data;
     } catch (error) {
       console.error("API: fetchMyProfessorCourses failed", error);
       return [];
     }
-  }, []);
+  }, [token]);
 
   const fetchProfessorAssignments = useCallback(async () => {
     try {
-      const { data } = await api.get('/professor/assignments');
+      const { data } = await api.get('/professor/assignments', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       return data;
     } catch (error) {
       console.error("API: fetchProfessorAssignments failed", error);
       return [];
     }
-  }, []);
+  }, [token]);
 
   const fetchProfessorCourseById = useCallback(async (courseId) => {
     try {
-      const { data } = await api.get(`/professor/courses/${courseId}`);
+      const { data } = await api.get(`/professor/courses/${courseId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       return data;
     } catch (error) {
       console.error("API: fetchProfessorCourseById failed", error);
       return null;
     }
-  }, []);
+  }, [token]);
 
   const fetchAssignmentsForCourse = useCallback(async (courseId) => {
     try {
-      const { data } = await api.get(`/assignments/course/${courseId}`);
+      const { data } = await api.get(`/assignments/course/${courseId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       return data;
     } catch (error) {
       console.error("API: fetchAssignmentsForCourse failed", error);
       return [];
     }
-  }, []);
+  }, [token]);
 
   const createProfessorCourse = async (courseData) => {
     try {
-      const { data } = await api.post('/professor/courses', courseData);
+      const { data } = await api.post('/professor/courses', courseData, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       toast.success("Course created!");
       return data;
     } catch (error) {
@@ -184,7 +271,9 @@ export const AppProvider = ({ children }) => {
 
   const updateProfessorCourse = async (courseId, updateData) => {
     try {
-      const { data } = await api.put(`/professor/courses/${courseId}`, updateData);
+      const { data } = await api.put(`/professor/courses/${courseId}`, updateData, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       toast.success("Course updated!");
       return data;
     } catch (error) {
@@ -196,7 +285,9 @@ export const AppProvider = ({ children }) => {
 
   const deleteProfessorCourse = async (courseId) => {
     try {
-      await api.delete(`/professor/courses/${courseId}`);
+      await api.delete(`/professor/courses/${courseId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       toast.success("Course deleted!");
       return true;
     } catch (error) {
@@ -208,11 +299,11 @@ export const AppProvider = ({ children }) => {
 
   const gradeSubmission = async (assignmentId, studentId, { grade, feedback }) => {
     try {
-      const { data } = await api.post(`/professor/assignments/${assignmentId}/grade`, {
-        studentId,
-        grade,
-        feedback,
-      });
+      const { data } = await api.post(
+        `/professor/assignments/${assignmentId}/grade`,
+        { studentId, grade, feedback },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       toast.success("Submission graded successfully!");
       return data;
     } catch (error) {
@@ -222,7 +313,95 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // ✅ Permanent Profile Update (Fixed)
+  const uploadStudyMaterial = async (courseId, materialData) => {
+  try {
+    const { data } = await api.post(`/professor/courses/${courseId}/materials`, materialData, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    toast.success("Study material uploaded!");
+    return data;
+  } catch (error) {
+    console.error("API: uploadStudyMaterial failed", error);
+    toast.error("Failed to upload material.");
+    return null;
+  }
+};
+
+  // =============================
+  // 🛠️ ADMIN FUNCTIONS
+  // =============================
+
+  const fetchAllUsersAdmin = useCallback(async () => {
+    try {
+      const { data } = await api.get('/admin/users', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return data;
+    } catch (error) {
+      console.error("API: fetchAllUsersAdmin failed", error);
+      return [];
+    }
+  }, [token]);
+
+  const createUser = async (userData) => {
+    try {
+      const { data } = await api.post('/admin/users', userData, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      toast.success("User created!");
+      return data;
+    } catch (error) {
+      console.error("API: createUser failed", error);
+      toast.error("Failed to create user.");
+      return null;
+    }
+  };
+
+  const createCourse = async (courseData) => {
+    try {
+      const { data } = await api.post('/admin/courses', courseData, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      toast.success("Course created by admin!");
+      return data;
+    } catch (error) {
+      console.error("API: createCourse failed", error);
+      toast.error("Failed to create course.");
+      return null;
+    }
+  };
+
+  const updateCourse = async (courseId, updateData) => {
+    try {
+      const { data } = await api.put(`/admin/courses/${courseId}`, updateData, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      toast.success("Course updated by admin!");
+      return data;
+    } catch (error) {
+      console.error("API: updateCourse failed", error);
+      toast.error("Failed to update course.");
+      return null;
+    }
+  };
+
+  const deleteCourse = async (courseId) => {
+    try {
+      await api.delete(`/admin/courses/${courseId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      toast.success("Course deleted by admin!");
+      return true;
+    } catch (error) {
+      console.error("API: deleteCourse failed", error);
+      toast.error("Failed to delete course.");
+      return false;
+    }
+  };
+
+  // =============================
+  // 👤 PROFILE FUNCTIONS
+  // =============================
   const updateUserProfile = async (profileData) => {
     try {
       const { data } = await api.put('/professor/profile', profileData, {
@@ -239,103 +418,57 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  const createAssignment = async (assignmentData) => {
-    try {
-      const { data } = await api.post('/assignments', assignmentData);
-      toast.success("Assignment created!");
-      return data;
-    } catch (error) {
-      console.error("API: createAssignment failed", error);
-      toast.error("Failed to create assignment.");
-      return null;
-    }
-  };
+  const createAssignment = async (assignmentData, isMultipart = false) => {
+  try {
+    const headers = isMultipart
+      ? { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" }
+      : { Authorization: `Bearer ${token}` };
 
-  // --- Admin Routes ---
-  const fetchAllUsersAdmin = useCallback(async () => {
-    try {
-      const { data } = await api.get('/admin/users');
-      return data;
-    } catch (error) {
-      console.error("API: fetchAllUsersAdmin failed", error);
-      return [];
-    }
-  }, []);
+    const { data } = await api.post("/assignments", assignmentData, { headers });
+    toast.success("Assignment created!");
+    return data;
+  } catch (error) {
+    console.error("API: createAssignment failed", error);
+    toast.error("Failed to create assignment.");
+    return null;
+  }
+};
 
-  const createCourse = async (courseData) => {
-    try {
-      const { data } = await api.post('/admin/courses', courseData);
-      toast.success("Course created by admin!");
-      return data;
-    } catch (error) {
-      console.error("API: createCourse failed", error);
-      toast.error("Failed to create course.");
-      return null;
-    }
-  };
 
-  const updateCourse = async (courseId, updateData) => {
-    try {
-      const { data } = await api.put(`/admin/courses/${courseId}`, updateData);
-      toast.success("Course updated by admin!");
-      return data;
-    } catch (error) {
-      console.error("API: updateCourse failed", error);
-      toast.error("Failed to update course.");
-      return null;
-    }
-  };
+  // =============================
+  // 🌍 CONTEXT VALUE
+  // =============================
 
-  const deleteCourse = async (courseId) => {
-    try {
-      await api.delete(`/admin/courses/${courseId}`);
-      toast.success("Course deleted by admin!");
-      return true;
-    } catch (error) {
-      console.error("API: deleteCourse failed", error);
-      toast.error("Failed to delete course.");
-      return false;
-    }
-  };
-
-  const createUser = async (userData) => {
-    try {
-      const { data } = await api.post('/admin/users', userData);
-      toast.success("User created!");
-      return data;
-    } catch (error) {
-      console.error("API: createUser failed", error);
-      toast.error("Failed to create user.");
-      return null;
-    }
-  };
-
-  // --- Context Value ---
   const value = {
     user,
     token,
     authLoading,
     loginUser,
     logoutUser,
+    getAllCourses,
+    getMyStudentCourses,
+    enrollInCourse,
+    unenrollFromCourse,
+    fetchCourseById,
+    fetchStudentDashboard,
+    fetchMyGrades,
+    submitAssignment,
+    fetchMyProfessorCourses,
+    fetchProfessorAssignments,
+    fetchProfessorCourseById,
+    fetchAssignmentsForCourse,
+    createProfessorCourse,
+    updateProfessorCourse,
+    deleteProfessorCourse,
+    gradeSubmission,
+    uploadStudyMaterial,
     fetchAllUsersAdmin,
     createUser,
     createCourse,
     updateCourse,
     deleteCourse,
-    fetchMyStudentCourses,
-    fetchMyGrades,
-    submitAssignment,
-    fetchMyProfessorCourses,
-    fetchProfessorAssignments,
-    gradeSubmission,
     updateUserProfile,
-    createProfessorCourse,
-    updateProfessorCourse,
-    deleteProfessorCourse,
-    fetchProfessorCourseById,
-    fetchAssignmentsForCourse,
     createAssignment,
-    fetchAllCourses,
   };
 
   return (

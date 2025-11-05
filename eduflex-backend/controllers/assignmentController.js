@@ -1,48 +1,94 @@
-// eduflex-backend/controllers/assignmentController.js
 const Assignment = require('../models/Assignment');
 const Course = require('../models/Course');
 
-// @desc    Create a new assignment
+// ======================================================
+// 🧾 Create a new assignment (with optional file upload)
 // @route   POST /api/assignments
-// @access  Private (Professor)
+// @access  Private (Professor or Admin)
+// ======================================================
 const createAssignment = async (req, res) => {
   try {
-    const { title, description, course, dueDate } = req.body;
+    const { title, description, dueDate, courseId } = req.body;
 
-    const courseObj = await Course.findById(course);
-    if (!courseObj) return res.status(404).json({ message: 'Course not found' });
-
-    // Ensure only the professor who owns this course can add assignments
-    if (String(courseObj.professor) !== String(req.user.id)) {
-      return res.status(403).json({ message: 'You can only create assignments for your own courses' });
+    // ✅ Validate inputs
+    if (!title || !description || !dueDate || !courseId) {
+      return res.status(400).json({ message: 'All fields are required.' });
     }
 
-    const assignment = new Assignment({
+    // ✅ Find the course and verify ownership
+    const course = await Course.findById(courseId);
+    if (!course) return res.status(404).json({ message: 'Course not found.' });
+
+    // ✅ Only the professor who owns the course or admin can create
+    if (
+      req.user.role !== 'admin' &&
+      String(course.professor) !== String(req.user.id)
+    ) {
+      return res.status(403).json({
+        message: 'You are not authorized to create assignments for this course.',
+      });
+    }
+
+    // ✅ Build assignment object
+    const assignmentData = {
       title,
       description,
-      course,
       dueDate,
+      course: courseId,
       submissions: [],
-    });
+    };
 
+    // ✅ Handle uploaded file (optional)
+    if (req.file) {
+      assignmentData.attachmentUrl = `/uploads/assignments/${courseId}/${req.file.filename}`;
+
+    }
+
+    // ✅ Save assignment
+    const assignment = new Assignment(assignmentData);
     await assignment.save();
-    res.status(201).json(assignment);
-  } catch (err) {
-    console.error('Error creating assignment:', err);
-    res.status(500).json({ message: 'Server error creating assignment' });
+
+    res.status(201).json({
+      message: 'Assignment created successfully.',
+      assignment,
+    });
+  } catch (error) {
+    console.error('Error creating assignment:', error);
+    res.status(500).json({ message: 'Server error creating assignment.' });
   }
 };
 
-// @desc    Get all assignments for a specific course
+// ======================================================
+// 📋 Get all assignments for a specific course
 // @route   GET /api/assignments/course/:courseId
-// @access  Private
+// @access  Private (Student, Professor, Admin)
+// ======================================================
 const getAssignmentsForCourse = async (req, res) => {
   try {
-    const assignments = await Assignment.find({ course: req.params.courseId });
+    const course = await Course.findById(req.params.courseId);
+    if (!course) return res.status(404).json({ message: 'Course not found.' });
+
+    // ✅ Authorization check (professor must own or student enrolled)
+    const isProfessor = String(course.professor) === String(req.user.id);
+    const isAdmin = req.user.role === 'admin';
+    const isStudent =
+      req.user.role === 'student' &&
+      course.students.map((id) => id.toString()).includes(req.user.id);
+
+    if (!isProfessor && !isAdmin && !isStudent) {
+      return res
+        .status(403)
+        .json({ message: 'You are not authorized to view these assignments.' });
+    }
+
+    const assignments = await Assignment.find({ course: req.params.courseId })
+      .sort({ dueDate: 1 }) // nearest due date first
+      .lean();
+
     res.json(assignments);
-  } catch (err) {
-    console.error('Error fetching assignments:', err);
-    res.status(500).json({ message: 'Server error fetching assignments' });
+  } catch (error) {
+    console.error('Error fetching assignments:', error);
+    res.status(500).json({ message: 'Server error fetching assignments.' });
   }
 };
 

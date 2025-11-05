@@ -1,26 +1,46 @@
 // eduflex-backend/models/Course.js
 const mongoose = require('mongoose');
 
-const courseSchema = new mongoose.Schema({
+const MaterialSchema = new mongoose.Schema({
   title: {
     type: String,
-    required: [true, 'Course title is required'],
+    required: [true, 'Material title is required'],
   },
-  description: {
+  fileUrl: {
     type: String,
-    required: [true, 'Course description is required'],
+    required: [true, 'File URL is required'],
   },
-  professor: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: [true, 'Professor is required'],
+  uploadedAt: {
+    type: Date,
+    default: Date.now,
   },
-  students: [
-    {
+});
+
+const CourseSchema = new mongoose.Schema(
+  {
+    title: {
+      type: String,
+      required: [true, 'Course title is required'],
+    },
+    description: {
+      type: String,
+      required: [true, 'Course description is required'],
+    },
+    professor: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
+      required: [true, 'Professor is required'],
     },
-  ],
-}, { timestamps: true });
+    students: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
+    // ✅ NEW FIELD: Study materials (professor uploads here)
+    materials: [MaterialSchema],
+  },
+  { timestamps: true }
+);
 
-module.exports = mongoose.model('Course', courseSchema);
+module.exports = mongoose.model('Course', CourseSchema);

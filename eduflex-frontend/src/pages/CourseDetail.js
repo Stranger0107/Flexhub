@@ -1,233 +1,175 @@
 // src/pages/CourseDetail.js
 import React, { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useApp } from "../contexts/AppContext";
-import { FaFilePdf, FaLink, FaCloudDownloadAlt, FaClipboardCheck, FaQuestionCircle, FaCheckCircle } from "react-icons/fa";
+import { toast } from "react-toastify";
 
 export default function CourseDetail() {
   const { courseId } = useParams();
-  const {
-    getAllCourses,
-    getStudentAssignmentsForCourse,
-    user
-  } = useApp();
-  const [loading, setLoading] = useState(true);
+  const { user, fetchCourseById, fetchAssignmentsForCourse } = useApp();
+
   const [course, setCourse] = useState(null);
   const [assignments, setAssignments] = useState([]);
-  const [error, setError] = useState("");
+  const [quizzes, setQuizzes] = useState([]);
+  const [loading, setLoading] = useState(true);
 
+  // ✅ Load course data and assignments
   useEffect(() => {
-    const fetchDetails = async () => {
-      setLoading(true);
+    const loadCourseData = async () => {
       try {
-        // Fetch latest full course list (or just this course if you have a specific API)
-        const courses = await getAllCourses();
-        const found = (courses || []).find(
-          c =>
-            String(c.id) === String(courseId) ||
-            String(c._id) === String(courseId)
-        );
-        if (!found || (user?.role === "student" && !found.enrolled)) {
-          setError("Course not found or not enrolled.");
-          setCourse(null);
-          setAssignments([]);
-        } else {
-          setCourse(found);
+        setLoading(true);
 
-          // Get assignments just for this course
-          const asgnList = await getStudentAssignmentsForCourse(found._id || found.id);
-          setAssignments(asgnList?.filter(a => a.courseId === (found._id || found.id)) || []);
+        // ✅ Fetch course (includes materials and students)
+        const courseData = await fetchCourseById(courseId);
+        if (!courseData) {
+          toast.error("Course not found.");
+          return;
         }
-      } catch (e) {
-        setError("Course not found or not enrolled.");
+        setCourse(courseData);
+
+        // ✅ Fetch assignments
+        const courseAssignments = await fetchAssignmentsForCourse(courseId);
+        setAssignments(Array.isArray(courseAssignments) ? courseAssignments : []);
+
+        // ✅ Fetch quizzes (optional if implemented later)
+        try {
+          const response = await fetch(`/api/quizzes/course/${courseId}`);
+          if (response.ok) {
+            const quizzesData = await response.json();
+            setQuizzes(quizzesData);
+          } else {
+            setQuizzes([]);
+          }
+        } catch {
+          setQuizzes([]);
+        }
+      } catch (err) {
+        console.error("Error loading course details:", err);
+        toast.error("Failed to load course data.");
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
-    fetchDetails();
-    // Only re-run when courseId or user changes
-  }, [courseId, getAllCourses, getStudentAssignmentsForCourse, user]);
 
-  if (loading) return <div style={{padding:"2rem"}}>Loading...</div>;
-  if (error) return <div style={{ padding: "2rem" }}>{error}</div>;
+    loadCourseData();
+  }, [courseId, fetchCourseById, fetchAssignmentsForCourse]);
 
-  const courseAssignments = assignments;
-  const materials = course.materials || [];
-  const quizzes = course.quizzes || [];
+  if (loading)
+    return (
+      <div className="p-6 text-center text-gray-600">Loading course details...</div>
+    );
+
+  if (!course)
+    return (
+      <div className="p-6 text-center text-gray-600">Course not found.</div>
+    );
 
   return (
-    <div style={{
-      padding: "2rem",
-      maxWidth: 780,
-      margin: "0 auto",
-      background: "radial-gradient(circle 600px at 65% 40%, #e0e7ff 0%, #f8fafc 100%)",
-      minHeight: "100vh"
-    }}>
-      <div style={{
-        background: "#fff",
-        borderRadius: "1rem",
-        boxShadow: "0 6px 32px #c7d2fe33",
-        padding: "2.2rem 2rem",
-        marginBottom: "2.5rem"
-      }}>
-        {/* Course Header */}
-        <div style={{ display: "flex", alignItems: "center", gap: 22, marginBottom: "2.2rem" }}>
-          {course.image && (
-            <img
-              src={course.image}
-              alt={course.title}
-              style={{ width: 110, height: 110, objectFit: "cover", borderRadius: "0.8rem", boxShadow: "0 2px 15px #c7d2fe55" }}
-            />
-          )}
-          <div>
-            <h2 style={{ fontWeight: "bold", fontSize: "2rem", marginBottom: "0.6rem", color: "#3730a3" }}>{course.title}</h2>
-            <div style={{ fontSize: "1.1rem", color: "#5c5c81", marginBottom: ".3rem" }}>
-              {course.description}
-            </div>
-            <div style={{ fontSize: ".97rem", color: "#388bb7" }}>
-              Instructor: <span style={{ fontWeight: 500 }}>{course.instructor || (course.teacher && course.teacher.name) || "-"}</span>
-            </div>
-            <div style={{ fontSize: ".92rem", color: "#aaa", marginTop: "0.18rem" }}>
-              Progress: <span style={{ color: "#22c55e", fontWeight: 500 }}>{course.progress ?? 0}%</span>
-            </div>
-          </div>
-        </div>
+    <div className="p-8 min-h-screen">
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-green-700 mb-1">{course.title}</h1>
+        <p className="text-gray-600 mb-2">{course.description}</p>
+        <p className="text-sm text-gray-500">
+          Professor: {course.professor?.name || "N/A"}
+        </p>
       </div>
 
-      {/* Study Materials */}
-      <div style={{
-        background: "#f9fafb",
-        borderRadius: "1rem",
-        padding: "1.5rem 2rem",
-        marginBottom: "2.2rem",
-        boxShadow: "0 2px 18px #cbd5e144"
-      }}>
-        <h3 style={{ color: "#2563eb", fontWeight: "bold", marginBottom: "1rem" }}>📁 Study Materials</h3>
-        {materials.length === 0 ? (
-          <div style={{ color: "#a6a6a6" }}>No materials uploaded yet.</div>
-        ) : (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "1.4rem" }}>
-            {materials.map(mat => (
-              <div key={mat.id} style={{
-                minWidth: 220,
-                background: "#eef1ff",
-                borderRadius: ".6rem",
-                padding: "0.9rem 1rem .7rem 1rem",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.7rem"
-              }}>
-                {mat.type === "pdf"
-                  ? <FaFilePdf style={{ color: "#ef4444", fontSize: "1.5rem" }} />
-                  : <FaLink style={{ color: "#2563eb", fontSize: "1.4rem" }} />}
-                <span style={{ fontWeight: 500 }}>
-                  <a href={mat.url} target="_blank" rel="noopener noreferrer" style={{ color: "#3730a3" }}>{mat.title}</a>
-                </span>
-                <a href={mat.url} target="_blank" rel="noopener noreferrer"
-                  style={{ marginLeft: "auto", color: "#0891b2", fontSize: "1.2rem" }}
-                  title="Download/Open"
-                >
-                  <FaCloudDownloadAlt />
-                </a>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Assignments */}
-      <div style={{
-        background: "#fff",
-        borderRadius: "1rem",
-        padding: "1.5rem 2rem",
-        marginBottom: "2.2rem",
-        boxShadow: "0 2px 18px #f0faf24c"
-      }}>
-        <h3 style={{ color: "#16a34a", fontWeight: "bold", marginBottom: "1rem" }}>📝 Assignments</h3>
-        {courseAssignments.length === 0 ? (
-          <div style={{ color: "#a6a6a6" }}>No assignments yet.</div>
-        ) : (
-          <ul style={{ padding: 0, listStyle: "none", marginLeft: 0 }}>
-            {courseAssignments.map(a => (
-              <li key={a.id} style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: "1rem",
-                background: "#f0fdf4",
-                borderRadius: ".6rem",
-                padding: "1rem 1.2rem"
-              }}>
+      {/* ✅ Study Materials */}
+      <section className="mb-8">
+        <h2 className="text-2xl font-semibold mb-3 text-green-700">📘 Study Materials</h2>
+        {course.materials && course.materials.length > 0 ? (
+          <ul className="bg-white rounded-lg shadow p-4 space-y-3">
+            {course.materials.map((m, i) => (
+              <li key={i} className="flex justify-between items-center">
                 <div>
-                  <div style={{ fontWeight: "bold", fontSize: "1.11rem" }}>{a.title}</div>
-                  <div style={{ color: "#166534", marginTop: "0.22rem", fontSize: ".99rem" }}>Due: {a.due}</div>
-                  <div style={{ color: "#444", fontSize: ".97rem", marginTop: ".15rem" }}>{a.instructions}</div>
+                  <p className="font-medium">{m.title}</p>
+                  <p className="text-xs text-gray-500">
+                    Uploaded on {new Date(m.uploadedAt).toLocaleDateString()}
+                  </p>
                 </div>
-                <Link to="/assignments" style={{
-                  marginLeft: 30,
-                  color: "#fff",
-                  background: "#22c55e",
-                  borderRadius: "7px",
-                  padding: ".6rem 1.25rem",
-                  fontWeight: 600,
-                  fontSize: ".97rem",
-                  textDecoration: "none",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px"
-                }}>
-                  <FaClipboardCheck /> Submit/View
-                </Link>
+                <div className="flex gap-3">
+                  <a
+                    href={m.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:underline"
+                  >
+                    View
+                  </a>
+                  <a
+                    href={m.fileUrl}
+                    download
+                    className="text-green-600 hover:underline"
+                  >
+                    Download
+                  </a>
+                </div>
               </li>
             ))}
           </ul>
-        )}
-      </div>
-
-      {/* Quizzes */}
-      <div style={{
-        background: "#fefce8",
-        borderRadius: "1rem",
-        padding: "1.5rem 2rem",
-        marginBottom: "1.7rem",
-        boxShadow: "0 2px 18px #fde68a22"
-      }}>
-        <h3 style={{ color: "#ca8a04", fontWeight: "bold", marginBottom: "1rem" }}>📋 Quizzes</h3>
-        {quizzes.length === 0 ? (
-          <div style={{ color: "#a6a6a6" }}>No quizzes yet.</div>
         ) : (
-          <ul style={{ padding: 0, listStyle: "none" }}>
-            {quizzes.map((q, idx) => (
-              <li key={q.id} style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: ".85rem",
-                background: "#fffbe3",
-                borderRadius: ".6rem",
-                padding: "0.8rem 1.1rem"
-              }}>
-                <span style={{ fontWeight: 600, fontSize: "1.1rem" }}>
-                  <FaQuestionCircle style={{ color: "#ca8a04", marginRight: 6, fontSize: "1.05em" }} />
-                  {q.title}
+          <p className="text-gray-500 italic">No study materials available yet.</p>
+        )}
+      </section>
+
+      {/* ✅ Assignments */}
+      <section className="mb-8">
+        <h2 className="text-2xl font-semibold mb-3 text-green-700">📝 Assignments</h2>
+        {assignments.length > 0 ? (
+          <ul className="bg-white rounded-lg shadow p-4 space-y-2">
+            {assignments.map((a) => (
+              <li key={a._id} className="flex justify-between items-center">
+                <div>
+                  <p className="font-semibold">{a.title}</p>
+                  <p className="text-sm text-gray-500">{a.description}</p>
+                </div>
+                <span className="text-sm text-gray-600">
+                  Due: {new Date(a.dueDate).toLocaleDateString()}
                 </span>
-                <Link to={`/courses/${course._id || course.id}/quizzes/${q.id}`}
-                  style={{
-                    color: "#fff", background: "#f59e42",
-                    borderRadius: "7px",
-                    padding: ".5rem 1.15rem",
-                    fontWeight: 600,
-                    fontSize: ".97rem",
-                    textDecoration: "none",
-                    marginLeft: "20px",
-                    display: "flex", alignItems: "center", gap: "6px"
-                  }}>
-                  <FaCheckCircle /> Take Quiz
-                </Link>
               </li>
             ))}
           </ul>
+        ) : (
+          <p className="text-gray-500 italic">No assignments found.</p>
         )}
-      </div>
+      </section>
+
+      {/* ✅ Quizzes */}
+      <section className="mb-8">
+        <h2 className="text-2xl font-semibold mb-3 text-green-700">🧠 Quizzes</h2>
+        {quizzes.length > 0 ? (
+          <ul className="bg-white rounded-lg shadow p-4 space-y-2">
+            {quizzes.map((q) => (
+              <li key={q._id} className="flex justify-between items-center">
+                <span className="font-medium">{q.title}</span>
+                <button className="text-blue-600 hover:underline">Take Quiz</button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-gray-500 italic">No quizzes yet.</p>
+        )}
+      </section>
+
+      {/* ✅ Enrolled Students (visible for professor/admin only) */}
+      {(user?.role === "professor" || user?.role === "admin") && (
+        <section>
+          <h2 className="text-2xl font-semibold mb-3 text-green-700">👥 Enrolled Students</h2>
+          {course.students && course.students.length > 0 ? (
+            <ul className="bg-white rounded-lg shadow p-4 space-y-1">
+              {course.students.map((s) => (
+                <li key={s._id} className="flex justify-between">
+                  <span>{s.name}</span>
+                  <span className="text-gray-500 text-sm">{s.email}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-gray-500 italic">No students enrolled yet.</p>
+          )}
+        </section>
+      )}
     </div>
   );
 }

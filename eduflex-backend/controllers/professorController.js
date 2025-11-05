@@ -1,7 +1,42 @@
-// eduflex-backend/controllers/professorController.js
 const User = require('../models/User');
 const Course = require('../models/Course');
 const Assignment = require('../models/Assignment');
+const path = require('path');
+
+
+// =========================================
+// 📚 Upload Study Material (File Upload)
+// =========================================
+exports.uploadStudyMaterial = async (req, res) => {
+  try {
+    const { title } = req.body;
+    const courseId = req.params.id;
+
+    const course = await Course.findById(courseId);
+    if (!course) return res.status(404).json({ message: 'Course not found' });
+
+    // Only the professor who owns this course can upload
+    if (String(course.professor) !== String(req.user.id)) {
+      return res.status(403).json({ message: 'Not authorized to upload materials for this course' });
+    }
+
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+
+    const filePath = `/uploads/materials/${courseId}/${req.file.filename}`;
+    const newMaterial = { title, fileUrl: filePath };
+
+    course.materials.push(newMaterial);
+    await course.save();
+
+    res.status(200).json({
+      message: 'File uploaded successfully!',
+      material: newMaterial,
+    });
+  } catch (err) {
+    console.error('Error uploading study material:', err);
+    res.status(500).json({ message: 'Server error uploading study material' });
+  }
+};
 
 // ============================
 // ✅ Professor Dashboard
@@ -152,7 +187,7 @@ exports.gradeAssignment = async (req, res) => {
 };
 
 // ============================
-// ✅ Update Professor Profile (Permanent)
+// ✅ Update Professor Profile
 // ============================
 exports.updateProfessorProfile = async (req, res) => {
   try {
@@ -173,5 +208,33 @@ exports.updateProfessorProfile = async (req, res) => {
   } catch (err) {
     console.error('Error updating profile:', err.message);
     res.status(500).json({ error: 'Server error while updating profile' });
+  }
+};
+
+// ============================
+// ✅ Upload Study Material
+// ============================
+exports.uploadStudyMaterial = async (req, res) => {
+  try {
+    const { title, url } = req.body;
+    const course = await Course.findById(req.params.id);
+
+    if (!course) return res.status(404).json({ error: 'Course not found' });
+    if (String(course.professor) !== String(req.user.id)) {
+      return res.status(403).json({ error: 'Not authorized to upload materials' });
+    }
+
+    if (!title || !url) {
+      return res.status(400).json({ error: 'Title and URL are required' });
+    }
+
+    const newMaterial = { title, fileUrl: url };
+    course.materials = [...(course.materials || []), newMaterial];
+    await course.save();
+
+    res.json({ message: 'Material added successfully', course });
+  } catch (err) {
+    console.error('Error uploading study material:', err);
+    res.status(500).json({ error: 'Server error uploading material' });
   }
 };

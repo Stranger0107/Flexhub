@@ -9,7 +9,7 @@ export default function ProfessorCourseDetail() {
     fetchProfessorCourseById,
     fetchAssignmentsForCourse,
     updateProfessorCourse,
-    createAssignment
+    createAssignment,
   } = useApp();
 
   const [course, setCourse] = useState(null);
@@ -24,6 +24,7 @@ export default function ProfessorCourseDetail() {
   const [assignmentTitle, setAssignmentTitle] = useState("");
   const [assignmentInstr, setAssignmentInstr] = useState("");
   const [assignmentDue, setAssignmentDue] = useState("");
+  const [assignmentFile, setAssignmentFile] = useState(null); // ✅ NEW
 
   // Fetch course + assignments
   const fetchCourseAndAssignments = useCallback(async () => {
@@ -31,7 +32,7 @@ export default function ProfessorCourseDetail() {
     try {
       const [fetchedCourse, fetchedAssignments] = await Promise.all([
         fetchProfessorCourseById(courseId),
-        fetchAssignmentsForCourse(courseId)
+        fetchAssignmentsForCourse(courseId),
       ]);
 
       setCourse(fetchedCourse);
@@ -57,14 +58,13 @@ export default function ProfessorCourseDetail() {
 
     const newMaterial = {
       title: materialTitle,
-      type: "link",
-      url: materialLink
+      fileUrl: materialLink,
     };
 
     const updatedMaterials = [...(course.materials || []), newMaterial];
 
     const updatedCourse = await updateProfessorCourse(courseId, {
-      materials: updatedMaterials
+      materials: updatedMaterials,
     });
 
     if (updatedCourse) {
@@ -75,6 +75,7 @@ export default function ProfessorCourseDetail() {
     }
   };
 
+  // ✅ UPDATED: Supports file uploads now
   const handleAddAssignment = async (e) => {
     e.preventDefault();
     if (!assignmentTitle || !assignmentInstr || !assignmentDue) {
@@ -82,20 +83,23 @@ export default function ProfessorCourseDetail() {
       return;
     }
 
-    // ✅ FIX: backend now accepts `courseId` instead of `course`
-    const assignmentData = {
-      title: assignmentTitle,
-      description: assignmentInstr,  // ✅ backend expects `description`
-      dueDate: assignmentDue,
-      courseId: courseId             // ✅ backend expects `courseId`
-    };
+    const formData = new FormData();
+    formData.append("title", assignmentTitle);
+    formData.append("description", assignmentInstr);
+    formData.append("dueDate", assignmentDue);
+    formData.append("courseId", courseId);
 
-    const newAssignment = await createAssignment(assignmentData);
+    if (assignmentFile) {
+      formData.append("file", assignmentFile); // ✅ send file
+    }
+
+    const newAssignment = await createAssignment(formData, true); // ✅ multipart flag
 
     if (newAssignment) {
       setAssignmentTitle("");
       setAssignmentInstr("");
       setAssignmentDue("");
+      setAssignmentFile(null);
       toast.success("Assignment added!");
       fetchCourseAndAssignments();
     }
@@ -181,6 +185,18 @@ export default function ProfessorCourseDetail() {
               <span className="text-sm text-gray-600 ml-3">
                 (Due: {new Date(a.dueDate).toLocaleDateString()})
               </span>
+              {a.attachmentUrl && (
+                <div className="mt-2">
+                  <a
+                    href={a.attachmentUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-indigo-600 text-sm hover:underline"
+                  >
+                    📎 Download Attachment
+                  </a>
+                </div>
+              )}
               <div className="text-sm text-gray-700 mt-1">
                 {a.description}
               </div>
@@ -193,6 +209,7 @@ export default function ProfessorCourseDetail() {
       <form
         onSubmit={handleAddAssignment}
         className="mb-10 p-4 bg-gray-50 rounded-lg shadow-sm"
+        encType="multipart/form-data"
       >
         <h4 className="font-semibold mb-3">Add New Assignment</h4>
         <div className="flex flex-wrap gap-4 items-center">
@@ -205,7 +222,6 @@ export default function ProfessorCourseDetail() {
           />
           <input
             type="date"
-            placeholder="Due Date"
             value={assignmentDue}
             onChange={(e) => setAssignmentDue(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
@@ -217,6 +233,12 @@ export default function ProfessorCourseDetail() {
             onChange={(e) => setAssignmentInstr(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-md text-sm flex-grow min-w-[220px] focus:outline-none focus:ring-2 focus:ring-indigo-400"
             required
+          />
+          <input
+            type="file"
+            accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+            onChange={(e) => setAssignmentFile(e.target.files[0])}
+            className="text-sm text-gray-700"
           />
           <button
             className="bg-indigo-600 text-white px-4 py-2 border-none rounded-md text-sm font-medium hover:bg-indigo-700"

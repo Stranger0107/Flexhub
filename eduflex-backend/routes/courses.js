@@ -1,39 +1,49 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate, authorize } = require('../middleware/authMiddleware.js');
-// Import existing AND the new update/delete controller functions
 const {
   createCourse,
   getAllCourses,
+  getCourseById,      // ✅ include this line
   enrollStudent,
-  updateCourse, // <-- Make sure this is imported
-  deleteCourse  // <-- Make sure this is imported
-} = require('../controllers/courseController.js'); // NOTE: controller file is singular 'coursecontroller.js'
+  unenrollStudent,
+  updateCourse,
+  deleteCourse,
+} = require('../controllers/courseController');
 
-// All routes here are protected by login
+// ✅ Require authentication for all routes
 router.use(authenticate);
 
-// --- Define routes ---
+// ================================
+// 📘 COURSE MANAGEMENT ROUTES
+// ================================
 
-// Create Course (teacher/admin)
-router.post('/', authorize('teacher','admin'), createCourse);
+// Create Course (Professor or Admin)
+router.post('/', authorize('professor', 'admin'), createCourse);
 
-// Get All Courses (any logged-in user)
+// Get All Courses (Any logged-in user)
 router.get('/', getAllCourses);
 
-// --- ADD THESE TWO LINES ---
-// Update Course (teacher who owns it, or admin)
-router.put('/:id', authorize('teacher','admin'), updateCourse);
+// Update Course (Professor who owns it or Admin)
+router.put('/:id', authorize('professor', 'admin'), updateCourse);
 
-// Delete Course (teacher who owns it, or admin)
-router.delete('/:id', authorize('teacher','admin'), deleteCourse);
-// --- END OF ADDED LINES ---
+// Delete Course (Professor who owns it or Admin)
+router.delete('/:id', authorize('professor', 'admin'), deleteCourse);
 
-// Enroll Student (teacher or admin)
-router.post('/:id/enroll', authorize('teacher','admin'), enrollStudent);
+// ================================
+// 🎓 ENROLLMENT ROUTES
+// ================================
 
-// (Optional placeholders for future features)
-// router.get('/:id', getCourseById);
-// router.delete('/:id/enroll/:studentId', authorize('teacher','admin'), unenrollStudent);
+// Enroll a Student (Student self, or Professor/Admin)
+router.post('/:id/enroll', authorize('student', 'professor', 'admin'), enrollStudent);
 
+// Unenroll a Student (Student self, or Professor/Admin)
+router.post('/:id/unenroll', authorize('student', 'professor', 'admin'), unenrollStudent);
+
+router.get('/:id', getCourseById);
+
+
+// ================================
+// Export Router
+// ================================
 module.exports = router;

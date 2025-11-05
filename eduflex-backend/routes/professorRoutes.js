@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const upload = require('../config/multerConfig');
 const {
   getProfessorDashboard,
   getMyCourses,
@@ -9,8 +10,10 @@ const {
   updateProfessorProfile,
   createCourse,
   updateCourse,
-  deleteCourse
-} = require('../controllers/professorController.js');
+  deleteCourse,
+  uploadStudyMaterial,
+} = require('../controllers/professorController');
+
 const { authenticate, authorize } = require('../middleware/authMiddleware.js');
 
 // Protect all routes — only for professors
@@ -29,6 +32,7 @@ router.post('/courses', createCourse);
 router.get('/courses/:id', getCourseById);
 router.put('/courses/:id', updateCourse);
 router.delete('/courses/:id', deleteCourse);
+router.post('/courses/:id/materials', uploadStudyMaterial);
 
 // --- Assignments ---
 router.get('/assignments', getMyAssignments);
