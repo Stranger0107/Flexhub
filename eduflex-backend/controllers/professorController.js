@@ -3,204 +3,175 @@ const User = require('../models/User');
 const Course = require('../models/Course');
 const Assignment = require('../models/Assignment');
 
-// @desc    Get professor's dashboard data
-// @route   GET /api/professor/dashboard
-const getProfessorDashboard = async (req, res) => {
+// ============================
+// ✅ Professor Dashboard
+// ============================
+exports.getProfessorDashboard = async (req, res) => {
   try {
-    const courses = await Course.find({ professor: req.user.id }).populate('students', 'name');
-    const assignments = await Assignment.find({ course: { $in: courses.map(c => c._id) } }).populate('course', 'title');
-    res.json({ courses, assignments });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
+    const courses = await Course.find({ professor: req.user.id });
+    const assignments = await Assignment.find({
+      course: { $in: courses.map(c => c._id) },
+    });
+
+    res.json({
+      totalCourses: courses.length,
+      totalAssignments: assignments.length,
+    });
+  } catch (error) {
+    console.error('Error in getProfessorDashboard:', error);
+    res.status(500).json({ error: 'Server error loading dashboard' });
   }
 };
 
-// @desc    Get all courses for the logged-in professor
-// @route   GET /api/professor/courses
-const getMyCourses = async (req, res) => {
+// ============================
+// ✅ Get All My Courses
+// ============================
+exports.getMyCourses = async (req, res) => {
   try {
-    const courses = await Course.find({ professor: req.user.id }).populate('students', 'name email');
+    const courses = await Course.find({ professor: req.user.id });
     res.json(courses);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error fetching courses:', err);
+    res.status(500).json({ error: 'Server error fetching courses' });
   }
 };
 
-// @desc    Get all assignments for the logged-in professor
-// @route   GET /api/professor/assignments
-const getMyAssignments = async (req, res) => {
+// ============================
+// ✅ Get Specific Course
+// ============================
+exports.getCourseById = async (req, res) => {
   try {
-    const courses = await Course.find({ professor: req.user.id }).select('_id');
-    const courseIds = courses.map(c => c._id);
-    const assignments = await Assignment.find({ course: { $in: courseIds } })
-      .populate('course', 'title')
-      .populate('submissions.student', 'name');
-    res.json(assignments);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-// @desc    Get a single course by ID
-// @route   GET /api/professor/courses/:id
-const getCourseById = async (req, res) => {
-  try {
-    const course = await Course.findOne({
-      _id: req.params.id,
-      professor: req.user.id
-    }).populate('students', 'name email');
-    
-    if (!course) {
-      return res.status(404).json({ message: 'Course not found or you do not teach this course' });
+    const course = await Course.findById(req.params.id);
+    if (!course) return res.status(404).json({ error: 'Course not found' });
+    if (String(course.professor) !== String(req.user.id)) {
+      return res.status(403).json({ error: 'Not authorized' });
     }
     res.json(course);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error fetching course:', err);
+    res.status(500).json({ error: 'Server error fetching course' });
   }
 };
 
-// @desc    Professor grades an assignment submission
-// @route   POST /api/professor/assignments/:id/grade
-const gradeAssignment = async (req, res) => {
+// ============================
+// ✅ Create a Course
+// ============================
+exports.createCourse = async (req, res) => {
   try {
-    const { studentId, grade, feedback } = req.body;
-    const assignment = await Assignment.findById(req.params.id);
-    if (!assignment) {
-      return res.status(404).json({ message: 'Assignment not found' });
-    }
-    const submission = assignment.submissions.find(
-      (sub) => sub.student.toString() === studentId
-    );
-    if (!submission) {
-      return res.status(404).json({ message: 'Submission not found' });
-    }
-    submission.grade = grade;
-    submission.feedback = feedback;
-    submission.gradedAt = Date.now();
-    await assignment.save();
-    res.json(assignment);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-// @desc    Professor updates their profile
-// @route   PUT /api/professor/profile
-const updateProfessorProfile = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    if (user) {
-      user.name = req.body.name || user.name;
-      user.email = req.body.email || user.email;
-      user.phone = req.body.phone || user.phone;
-      const updatedUser = await user.save();
-      res.json({
-        _id: updatedUser._id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        role: updatedUser.role,
-        phone: updatedUser.phone
-      });
-    } else {
-      res.status(404).json({ message: 'User not found' });
-    }
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-// --- NEW FUNCTION TO CREATE COURSE ---
-// @desc    Professor creates a new course
-// @route   POST /api/professor/courses
-// @access  Private (Professor)
-const createCourse = async (req, res) => {
-  try {
-    const { title, description } = req.body; 
-
-    if (!title || !description) {
-      return res.status(400).json({ message: 'Title and description are required' });
-    }
-
+    const { title, description } = req.body;
     const newCourse = new Course({
       title,
       description,
-      professor: req.user.id 
+      professor: req.user.id,
     });
-
-    const createdCourse = await newCourse.save();
-    res.status(201).json(createdCourse);
+    const saved = await newCourse.save();
+    res.status(201).json(saved);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error creating course' });
+    console.error('Error creating course:', err);
+    res.status(500).json({ error: 'Server error creating course' });
   }
 };
 
-// --- NEW FUNCTION TO UPDATE COURSE ---
-// @desc    Professor updates their own course
-// @route   PUT /api/professor/courses/:id
-// @access  Private (Professor)
-const updateCourse = async (req, res) => {
+// ============================
+// ✅ Update Course
+// ============================
+exports.updateCourse = async (req, res) => {
   try {
-    const { title, description } = req.body;
     const course = await Course.findById(req.params.id);
-
-    if (!course) {
-      return res.status(404).json({ message: 'Course not found' });
-    }
-    if (course.professor.toString() !== req.user.id) {
-      return res.status(401).json({ message: 'Not authorized to edit this course' });
+    if (!course) return res.status(404).json({ error: 'Course not found' });
+    if (String(course.professor) !== String(req.user.id)) {
+      return res.status(403).json({ error: 'Not authorized' });
     }
 
-    course.title = title || course.title;
-    course.description = description || course.description;
-
-    const updatedCourse = await course.save();
-    res.json(updatedCourse);
+    Object.assign(course, req.body);
+    const updated = await course.save();
+    res.json(updated);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error updating course' });
+    console.error('Error updating course:', err);
+    res.status(500).json({ error: 'Server error updating course' });
   }
 };
 
-// --- NEW FUNCTION TO DELETE COURSE ---
-// @desc    Professor deletes their own course
-// @route   DELETE /api/professor/courses/:id
-// @access  Private (Professor)
-const deleteCourse = async (req, res) => {
+// ============================
+// ✅ Delete Course
+// ============================
+exports.deleteCourse = async (req, res) => {
   try {
     const course = await Course.findById(req.params.id);
-
-    if (!course) {
-      return res.status(404).json({ message: 'Course not found' });
+    if (!course) return res.status(404).json({ error: 'Course not found' });
+    if (String(course.professor) !== String(req.user.id)) {
+      return res.status(403).json({ error: 'Not authorized' });
     }
-    if (course.professor.toString() !== req.user.id) {
-      return res.status(401).json({ message: 'Not authorized to delete this course' });
-    }
-
-    await Assignment.deleteMany({ course: course._id });
     await course.deleteOne();
-    
-    res.json({ message: 'Course and associated assignments removed' });
+    res.json({ message: 'Course deleted successfully' });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error deleting course' });
+    console.error('Error deleting course:', err);
+    res.status(500).json({ error: 'Server error deleting course' });
   }
 };
 
-// Export all functions needed by your router
-module.exports = {
-  getProfessorDashboard,
-  getMyCourses,
-  getMyAssignments,
-  getCourseById,
-  gradeAssignment,
-  updateProfessorProfile,
-  createCourse, 
-  updateCourse, 
-  deleteCourse
+// ============================
+// ✅ Get Professor Assignments
+// ============================
+exports.getMyAssignments = async (req, res) => {
+  try {
+    const courses = await Course.find({ professor: req.user.id });
+    const assignments = await Assignment.find({
+      course: { $in: courses.map(c => c._id) },
+    });
+    res.json(assignments);
+  } catch (err) {
+    console.error('Error fetching assignments:', err);
+    res.status(500).json({ error: 'Server error fetching assignments' });
+  }
+};
+
+// ============================
+// ✅ Grade an Assignment
+// ============================
+exports.gradeAssignment = async (req, res) => {
+  try {
+    const { grade, feedback } = req.body;
+    const assignment = await Assignment.findById(req.params.id);
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+
+    const submission = assignment.submissions.find(
+      (s) => String(s.student) === String(req.body.studentId)
+    );
+    if (!submission) return res.status(404).json({ error: 'Submission not found' });
+
+    submission.grade = grade;
+    submission.feedback = feedback;
+    await assignment.save();
+
+    res.json({ message: 'Grade updated successfully' });
+  } catch (err) {
+    console.error('Error grading assignment:', err);
+    res.status(500).json({ error: 'Server error grading assignment' });
+  }
+};
+
+// ============================
+// ✅ Update Professor Profile (Permanent)
+// ============================
+exports.updateProfessorProfile = async (req, res) => {
+  try {
+    const { name, department, email } = req.body;
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ error: 'Professor not found' });
+
+    if (name) user.name = name;
+    if (department) user.department = department;
+    if (email) user.email = email;
+
+    const updatedUser = await user.save();
+    const safeUser = updatedUser.toObject();
+    delete safeUser.password;
+
+    res.json(safeUser);
+  } catch (err) {
+    console.error('Error updating profile:', err.message);
+    res.status(500).json({ error: 'Server error while updating profile' });
+  }
 };

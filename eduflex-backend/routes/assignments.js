@@ -1,18 +1,15 @@
+// eduflex-backend/routes/assignments.js
 const express = require('express');
 const router = express.Router();
-const { authenticate, authorize } = require('../middleware/authMiddleware.js');
-const {
-  createAssignment,
-  getAssignmentsForCourse
-} = require('../controllers/assignmentController.js');
+const { authenticate, authorize } = require('../middleware/authMiddleware');
+const { createAssignment, getAssignmentsForCourse } = require('../controllers/assignmentController');
 
-// All routes here are protected by login
 router.use(authenticate);
 
-// create assignment (teacher only)
-router.post('/', authorize('teacher'), createAssignment);
+// professor creates assignment
+router.post('/', authorize('professor'), createAssignment);
 
-// list assignments for a course
+// get all assignments for a specific course
 router.get('/course/:courseId', getAssignmentsForCourse);
 
 module.exports = router;

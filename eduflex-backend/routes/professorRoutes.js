@@ -1,4 +1,3 @@
-// eduflex-backend/routes/professorRoutes.js
 const express = require('express');
 const router = express.Router();
 const {
@@ -8,15 +7,15 @@ const {
   getCourseById,
   gradeAssignment,
   updateProfessorProfile,
-  createCourse, // <-- Import new function
-  updateCourse, // <-- Import new function
-  deleteCourse  // <-- Import new function
+  createCourse,
+  updateCourse,
+  deleteCourse
 } = require('../controllers/professorController.js');
 const { authenticate, authorize } = require('../middleware/authMiddleware.js');
 
-// All routes in this file are for professors only
+// Protect all routes — only for professors
 router.use(authenticate);
-router.use(authorize('professor')); // <-- *** FIX: Was 'teacher' ***
+router.use(authorize('professor'));
 
 // --- Dashboard ---
 router.get('/dashboard', getProfessorDashboard);
@@ -24,14 +23,14 @@ router.get('/dashboard', getProfessorDashboard);
 // --- Profile ---
 router.put('/profile', updateProfessorProfile);
 
-// --- Course Routes ---
+// --- Courses ---
 router.get('/courses', getMyCourses);
-router.post('/courses', createCourse);         // <-- ADDED: POST /api/professor/courses
+router.post('/courses', createCourse);
 router.get('/courses/:id', getCourseById);
-router.put('/courses/:id', updateCourse);       // <-- ADDED: PUT /api/professor/courses/:id
-router.delete('/courses/:id', deleteCourse);    // <-- ADDED: DELETE /api/professor/courses/:id
+router.put('/courses/:id', updateCourse);
+router.delete('/courses/:id', deleteCourse);
 
-// --- Assignment Routes ---
+// --- Assignments ---
 router.get('/assignments', getMyAssignments);
 router.post('/assignments/:id/grade', gradeAssignment);
 
