@@ -1,25 +1,29 @@
-// src/pages/CourseDetail.js
 import React, { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { useApp } from "../contexts/AppContext";
 import { toast } from "react-toastify";
 
 export default function CourseDetail() {
   const { courseId } = useParams();
-  const { user, fetchCourseById, fetchAssignmentsForCourse } = useApp();
+  const {
+    user,
+    fetchCourseById,
+    fetchAssignmentsForCourse,
+    fetchQuizzesForCourse, // ✅ Added
+  } = useApp();
 
   const [course, setCourse] = useState(null);
   const [assignments, setAssignments] = useState([]);
   const [quizzes, setQuizzes] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ✅ Load course data and assignments
+  // ✅ Load course data, assignments, and quizzes
   useEffect(() => {
     const loadCourseData = async () => {
       try {
         setLoading(true);
 
-        // ✅ Fetch course (includes materials and students)
+        // Fetch course info
         const courseData = await fetchCourseById(courseId);
         if (!courseData) {
           toast.error("Course not found.");
@@ -27,22 +31,13 @@ export default function CourseDetail() {
         }
         setCourse(courseData);
 
-        // ✅ Fetch assignments
+        // Fetch assignments
         const courseAssignments = await fetchAssignmentsForCourse(courseId);
         setAssignments(Array.isArray(courseAssignments) ? courseAssignments : []);
 
-        // ✅ Fetch quizzes (optional if implemented later)
-        try {
-          const response = await fetch(`/api/quizzes/course/${courseId}`);
-          if (response.ok) {
-            const quizzesData = await response.json();
-            setQuizzes(quizzesData);
-          } else {
-            setQuizzes([]);
-          }
-        } catch {
-          setQuizzes([]);
-        }
+        // ✅ Fetch quizzes using authenticated API
+        const quizzesData = await fetchQuizzesForCourse(courseId);
+        setQuizzes(Array.isArray(quizzesData) ? quizzesData : []);
       } catch (err) {
         console.error("Error loading course details:", err);
         toast.error("Failed to load course data.");
@@ -52,7 +47,7 @@ export default function CourseDetail() {
     };
 
     loadCourseData();
-  }, [courseId, fetchCourseById, fetchAssignmentsForCourse]);
+  }, [courseId, fetchCourseById, fetchAssignmentsForCourse, fetchQuizzesForCourse]);
 
   if (loading)
     return (
@@ -77,7 +72,9 @@ export default function CourseDetail() {
 
       {/* ✅ Study Materials */}
       <section className="mb-8">
-        <h2 className="text-2xl font-semibold mb-3 text-green-700">📘 Study Materials</h2>
+        <h2 className="text-2xl font-semibold mb-3 text-green-700">
+          📘 Study Materials
+        </h2>
         {course.materials && course.materials.length > 0 ? (
           <ul className="bg-white rounded-lg shadow p-4 space-y-3">
             {course.materials.map((m, i) => (
@@ -85,7 +82,10 @@ export default function CourseDetail() {
                 <div>
                   <p className="font-medium">{m.title}</p>
                   <p className="text-xs text-gray-500">
-                    Uploaded on {new Date(m.uploadedAt).toLocaleDateString()}
+                    Uploaded on{" "}
+                    {m.uploadedAt
+                      ? new Date(m.uploadedAt).toLocaleDateString()
+                      : "Unknown"}
                   </p>
                 </div>
                 <div className="flex gap-3">
@@ -109,13 +109,17 @@ export default function CourseDetail() {
             ))}
           </ul>
         ) : (
-          <p className="text-gray-500 italic">No study materials available yet.</p>
+          <p className="text-gray-500 italic">
+            No study materials available yet.
+          </p>
         )}
       </section>
 
       {/* ✅ Assignments */}
       <section className="mb-8">
-        <h2 className="text-2xl font-semibold mb-3 text-green-700">📝 Assignments</h2>
+        <h2 className="text-2xl font-semibold mb-3 text-green-700">
+          📝 Assignments
+        </h2>
         {assignments.length > 0 ? (
           <ul className="bg-white rounded-lg shadow p-4 space-y-2">
             {assignments.map((a) => (
@@ -123,6 +127,16 @@ export default function CourseDetail() {
                 <div>
                   <p className="font-semibold">{a.title}</p>
                   <p className="text-sm text-gray-500">{a.description}</p>
+                  {a.attachmentUrl && (
+                    <a
+                      href={a.attachmentUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-indigo-600 text-sm hover:underline block mt-1"
+                    >
+                      📎 View Attachment
+                    </a>
+                  )}
                 </div>
                 <span className="text-sm text-gray-600">
                   Due: {new Date(a.dueDate).toLocaleDateString()}
@@ -137,13 +151,28 @@ export default function CourseDetail() {
 
       {/* ✅ Quizzes */}
       <section className="mb-8">
-        <h2 className="text-2xl font-semibold mb-3 text-green-700">🧠 Quizzes</h2>
+        <h2 className="text-2xl font-semibold mb-3 text-green-700">
+          🧠 Quizzes
+        </h2>
         {quizzes.length > 0 ? (
           <ul className="bg-white rounded-lg shadow p-4 space-y-2">
             {quizzes.map((q) => (
-              <li key={q._id} className="flex justify-between items-center">
-                <span className="font-medium">{q.title}</span>
-                <button className="text-blue-600 hover:underline">Take Quiz</button>
+              <li
+                key={q._id}
+                className="flex justify-between items-center border-b pb-2"
+              >
+                <div>
+                  <span className="font-medium">{q.title}</span>
+                  <p className="text-xs text-gray-500">
+                    {q.questions?.length || 0} Questions
+                  </p>
+                </div>
+                <Link
+                  to={`/student/courses/${courseId}/quiz/${q._id}`}
+                  className="text-blue-600 hover:underline font-medium"
+                >
+                  Take Quiz
+                </Link>
               </li>
             ))}
           </ul>
@@ -155,7 +184,9 @@ export default function CourseDetail() {
       {/* ✅ Enrolled Students (visible for professor/admin only) */}
       {(user?.role === "professor" || user?.role === "admin") && (
         <section>
-          <h2 className="text-2xl font-semibold mb-3 text-green-700">👥 Enrolled Students</h2>
+          <h2 className="text-2xl font-semibold mb-3 text-green-700">
+            👥 Enrolled Students
+          </h2>
           {course.students && course.students.length > 0 ? (
             <ul className="bg-white rounded-lg shadow p-4 space-y-1">
               {course.students.map((s) => (

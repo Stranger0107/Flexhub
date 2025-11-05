@@ -33,6 +33,9 @@ app.get('/', (req, res) => {
   res.send('EduFlex API is running...');
 });
 
+// ✅ Quiz routes
+app.use('/api/quizzes', require('./routes/quizRoutes.js'));
+
 // ✅ Handle 404 (must come last)
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });

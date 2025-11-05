@@ -10,13 +10,16 @@ export default function ProfessorCourseDetail() {
     fetchAssignmentsForCourse,
     updateProfessorCourse,
     createAssignment,
+    fetchQuizzesForCourse,
+    createQuiz,
   } = useApp();
 
   const [course, setCourse] = useState(null);
   const [courseAssignments, setCourseAssignments] = useState([]);
+  const [courseQuizzes, setCourseQuizzes] = useState([]); // ✅ New
   const [loading, setLoading] = useState(true);
 
-  // Material form
+  // Study Material form
   const [materialTitle, setMaterialTitle] = useState("");
   const [materialLink, setMaterialLink] = useState("");
 
@@ -24,30 +27,41 @@ export default function ProfessorCourseDetail() {
   const [assignmentTitle, setAssignmentTitle] = useState("");
   const [assignmentInstr, setAssignmentInstr] = useState("");
   const [assignmentDue, setAssignmentDue] = useState("");
-  const [assignmentFile, setAssignmentFile] = useState(null); // ✅ NEW
+  const [assignmentFile, setAssignmentFile] = useState(null);
 
-  // Fetch course + assignments
-  const fetchCourseAndAssignments = useCallback(async () => {
+  // ✅ Quiz form
+  const [quizTitle, setQuizTitle] = useState("");
+  const [questions, setQuestions] = useState([
+    { questionText: "", options: ["", "", "", ""], correctOption: 0 },
+  ]);
+
+  // -------------------------
+  // Fetch course + assignments + quizzes
+  // -------------------------
+  const fetchAllData = useCallback(async () => {
     setLoading(true);
     try {
-      const [fetchedCourse, fetchedAssignments] = await Promise.all([
+      const [fetchedCourse, fetchedAssignments, fetchedQuizzes] = await Promise.all([
         fetchProfessorCourseById(courseId),
         fetchAssignmentsForCourse(courseId),
+        fetchQuizzesForCourse(courseId),
       ]);
-
       setCourse(fetchedCourse);
       setCourseAssignments(fetchedAssignments || []);
-    } catch (err) {
+      setCourseQuizzes(fetchedQuizzes || []);
+    } catch {
       toast.error("Failed to load course data.");
     }
     setLoading(false);
-  }, [courseId, fetchProfessorCourseById, fetchAssignmentsForCourse]);
+  }, [courseId, fetchProfessorCourseById, fetchAssignmentsForCourse, fetchQuizzesForCourse]);
 
   useEffect(() => {
-    fetchCourseAndAssignments();
-  }, [fetchCourseAndAssignments]);
+    fetchAllData();
+  }, [fetchAllData]);
 
-  // --- FORM HANDLERS ---
+  // -------------------------
+  // HANDLERS
+  // -------------------------
 
   const handleAddMaterial = async (e) => {
     e.preventDefault();
@@ -56,11 +70,7 @@ export default function ProfessorCourseDetail() {
       return;
     }
 
-    const newMaterial = {
-      title: materialTitle,
-      fileUrl: materialLink,
-    };
-
+    const newMaterial = { title: materialTitle, fileUrl: materialLink };
     const updatedMaterials = [...(course.materials || []), newMaterial];
 
     const updatedCourse = await updateProfessorCourse(courseId, {
@@ -71,11 +81,10 @@ export default function ProfessorCourseDetail() {
       setMaterialTitle("");
       setMaterialLink("");
       toast.success("Material added!");
-      fetchCourseAndAssignments();
+      fetchAllData();
     }
   };
 
-  // ✅ UPDATED: Supports file uploads now
   const handleAddAssignment = async (e) => {
     e.preventDefault();
     if (!assignmentTitle || !assignmentInstr || !assignmentDue) {
@@ -88,20 +97,57 @@ export default function ProfessorCourseDetail() {
     formData.append("description", assignmentInstr);
     formData.append("dueDate", assignmentDue);
     formData.append("courseId", courseId);
+    if (assignmentFile) formData.append("file", assignmentFile);
 
-    if (assignmentFile) {
-      formData.append("file", assignmentFile); // ✅ send file
-    }
-
-    const newAssignment = await createAssignment(formData, true); // ✅ multipart flag
-
+    const newAssignment = await createAssignment(formData, true);
     if (newAssignment) {
       setAssignmentTitle("");
       setAssignmentInstr("");
       setAssignmentDue("");
       setAssignmentFile(null);
       toast.success("Assignment added!");
-      fetchCourseAndAssignments();
+      fetchAllData();
+    }
+  };
+
+  // ✅ QUIZ HANDLERS
+  const addQuestion = () => {
+    setQuestions([...questions, { questionText: "", options: ["", "", "", ""], correctOption: 0 }]);
+  };
+
+  const handleQuestionChange = (i, value) => {
+    const updated = [...questions];
+    updated[i].questionText = value;
+    setQuestions(updated);
+  };
+
+  const handleOptionChange = (qi, oi, value) => {
+    const updated = [...questions];
+    updated[qi].options[oi] = value;
+    setQuestions(updated);
+  };
+
+  const handleCorrectOptionChange = (qi, value) => {
+    const updated = [...questions];
+    updated[qi].correctOption = parseInt(value);
+    setQuestions(updated);
+  };
+
+  const handleCreateQuiz = async (e) => {
+    e.preventDefault();
+    if (!quizTitle || questions.some(q => !q.questionText || q.options.some(o => !o))) {
+      toast.error("Please fill all quiz fields properly!");
+      return;
+    }
+
+    const payload = { title: quizTitle, courseId, questions };
+    const newQuiz = await createQuiz(payload);
+
+    if (newQuiz) {
+      toast.success("Quiz created successfully!");
+      setQuizTitle("");
+      setQuestions([{ questionText: "", options: ["", "", "", ""], correctOption: 0 }]);
+      fetchAllData();
     }
   };
 
@@ -113,7 +159,9 @@ export default function ProfessorCourseDetail() {
       <h2 className="font-bold text-3xl mb-4">{course.title}</h2>
       <p className="mb-8 text-gray-700 text-base">{course.description}</p>
 
+      {/* ======================== */}
       {/* Study Materials */}
+      {/* ======================== */}
       <h3 className="mt-8 text-2xl font-semibold mb-4">Study Materials</h3>
       <div className="flex flex-wrap gap-3 my-4">
         {(course.materials || []).length === 0 ? (
@@ -121,20 +169,18 @@ export default function ProfessorCourseDetail() {
         ) : (
           (course.materials || []).map((mat, index) => (
             <a
-              href={mat.url}
+              href={mat.url || mat.fileUrl}
               target="_blank"
               rel="noopener noreferrer"
               key={index}
               className="bg-gray-100 rounded-md px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-200 transition-colors"
             >
-              {mat.type === "pdf" ? "📄" : "🔗"}&nbsp;
-              {mat.title}
+              📄 {mat.title}
             </a>
           ))
         )}
       </div>
 
-      {/* Add Material FORM */}
       <form
         onSubmit={handleAddMaterial}
         className="mb-8 p-4 bg-gray-50 rounded-lg shadow-sm"
@@ -145,7 +191,7 @@ export default function ProfessorCourseDetail() {
             placeholder="Material Title"
             value={materialTitle}
             onChange={(e) => setMaterialTitle(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            className="px-3 py-2 border border-gray-300 rounded-md text-sm"
             required
           />
           <input
@@ -153,11 +199,11 @@ export default function ProfessorCourseDetail() {
             type="url"
             value={materialLink}
             onChange={(e) => setMaterialLink(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            className="px-3 py-2 border border-gray-300 rounded-md text-sm"
             required
           />
           <button
-            className="bg-indigo-600 text-white px-4 py-2 border-none rounded-md text-sm font-medium hover:bg-indigo-700"
+            className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700"
             type="submit"
           >
             Add Material
@@ -165,7 +211,9 @@ export default function ProfessorCourseDetail() {
         </div>
       </form>
 
+      {/* ======================== */}
       {/* Assignments */}
+      {/* ======================== */}
       <h3 className="mt-10 text-2xl font-semibold mb-4">Assignments</h3>
       <div className="my-4 space-y-3">
         {courseAssignments.length === 0 ? (
@@ -197,15 +245,12 @@ export default function ProfessorCourseDetail() {
                   </a>
                 </div>
               )}
-              <div className="text-sm text-gray-700 mt-1">
-                {a.description}
-              </div>
+              <div className="text-sm text-gray-700 mt-1">{a.description}</div>
             </div>
           ))
         )}
       </div>
 
-      {/* Add Assignment FORM */}
       <form
         onSubmit={handleAddAssignment}
         className="mb-10 p-4 bg-gray-50 rounded-lg shadow-sm"
@@ -217,21 +262,21 @@ export default function ProfessorCourseDetail() {
             placeholder="Assignment Title"
             value={assignmentTitle}
             onChange={(e) => setAssignmentTitle(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            className="px-3 py-2 border border-gray-300 rounded-md text-sm"
             required
           />
           <input
             type="date"
             value={assignmentDue}
             onChange={(e) => setAssignmentDue(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            className="px-3 py-2 border border-gray-300 rounded-md text-sm"
             required
           />
           <input
             placeholder="Instructions"
             value={assignmentInstr}
             onChange={(e) => setAssignmentInstr(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm flex-grow min-w-[220px] focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            className="px-3 py-2 border border-gray-300 rounded-md text-sm flex-grow"
             required
           />
           <input
@@ -241,10 +286,94 @@ export default function ProfessorCourseDetail() {
             className="text-sm text-gray-700"
           />
           <button
-            className="bg-indigo-600 text-white px-4 py-2 border-none rounded-md text-sm font-medium hover:bg-indigo-700"
+            className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700"
             type="submit"
           >
             Add Assignment
+          </button>
+        </div>
+      </form>
+
+      {/* ======================== */}
+      {/* QUIZZES SECTION */}
+      {/* ======================== */}
+      <h3 className="mt-10 text-2xl font-semibold mb-4">Quizzes</h3>
+      <div className="my-4 space-y-3">
+        {courseQuizzes.length === 0 ? (
+          <p className="text-gray-500 text-sm">No quizzes created yet.</p>
+        ) : (
+          courseQuizzes.map((quiz) => (
+            <div
+              key={quiz._id}
+              className="bg-yellow-50 border border-yellow-200 rounded-lg p-4"
+            >
+              <div className="text-lg font-semibold text-yellow-800">{quiz.title}</div>
+              <div className="text-sm text-gray-600">
+                Questions: {quiz.questions?.length || 0}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* CREATE QUIZ FORM */}
+      <form
+        onSubmit={handleCreateQuiz}
+        className="mt-6 p-4 bg-gray-50 rounded-lg shadow-sm"
+      >
+        <h4 className="font-semibold mb-3">Create New Quiz</h4>
+
+        <input
+          placeholder="Quiz Title"
+          value={quizTitle}
+          onChange={(e) => setQuizTitle(e.target.value)}
+          className="px-3 py-2 border border-gray-300 rounded-md text-sm w-full mb-4"
+          required
+        />
+
+        {questions.map((q, qi) => (
+          <div key={qi} className="mb-4 border-b pb-3">
+            <input
+              placeholder={`Question ${qi + 1}`}
+              value={q.questionText}
+              onChange={(e) => handleQuestionChange(qi, e.target.value)}
+              className="w-full mb-2 px-3 py-2 border rounded-md text-sm"
+              required
+            />
+            {q.options.map((opt, oi) => (
+              <div key={oi} className="flex items-center gap-2 mb-1">
+                <input
+                  type="radio"
+                  name={`correct-${qi}`}
+                  value={oi}
+                  checked={q.correctOption === oi}
+                  onChange={(e) => handleCorrectOptionChange(qi, e.target.value)}
+                />
+                <input
+                  placeholder={`Option ${oi + 1}`}
+                  value={opt}
+                  onChange={(e) => handleOptionChange(qi, oi, e.target.value)}
+                  className="flex-grow px-2 py-1 border rounded-md text-sm"
+                  required
+                />
+              </div>
+            ))}
+          </div>
+        ))}
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={addQuestion}
+            className="bg-gray-200 px-3 py-1 rounded-md text-sm hover:bg-gray-300"
+          >
+            + Add Question
+          </button>
+          <button
+            type="submit"
+            className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700"
+          >
+            Create Quiz
           </button>
         </div>
       </form>

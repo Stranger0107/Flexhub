@@ -122,6 +122,11 @@ function AppWrapper() {
             </ProtectedRoute>
           } />
 
+<Route
+  path="/student/courses/:courseId/quiz/:quizId"
+  element={<TakeQuiz />}
+/>
+
           {/* PROFESSOR ROUTES */}
           <Route path="/professor/profile" element={
             <ProtectedRoute allowedRoles={["professor"]}>

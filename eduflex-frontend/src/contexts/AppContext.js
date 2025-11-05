@@ -89,7 +89,6 @@ export const AppProvider = ({ children }) => {
   // 📚 COURSE FUNCTIONS (ALL USERS)
   // =============================
 
-    // ✅ Fetch a single course by ID (for CourseDetail)
   const fetchCourseById = useCallback(async (courseId) => {
     try {
       const { data } = await api.get(`/courses/${courseId}`, {
@@ -102,7 +101,6 @@ export const AppProvider = ({ children }) => {
       return null;
     }
   }, [token]);
-
 
   const getAllCourses = useCallback(async () => {
     try {
@@ -154,7 +152,7 @@ export const AppProvider = ({ children }) => {
       const { data } = await api.get('/student/dashboard', {
         headers: { Authorization: `Bearer ${token}` },
       });
-      return data; // { totalCourses, pendingAssignments, averageGrade }
+      return data;
     } catch (error) {
       console.error("API: fetchStudentDashboard failed", error);
       toast.error("Failed to load student dashboard.");
@@ -207,6 +205,7 @@ export const AppProvider = ({ children }) => {
   // =============================
   // 👨‍🏫 PROFESSOR FUNCTIONS
   // =============================
+
   const fetchMyProfessorCourses = useCallback(async () => {
     try {
       const { data } = await api.get('/professor/courses', {
@@ -314,23 +313,80 @@ export const AppProvider = ({ children }) => {
   };
 
   const uploadStudyMaterial = async (courseId, materialData) => {
-  try {
-    const { data } = await api.post(`/professor/courses/${courseId}/materials`, materialData, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    toast.success("Study material uploaded!");
-    return data;
-  } catch (error) {
-    console.error("API: uploadStudyMaterial failed", error);
-    toast.error("Failed to upload material.");
-    return null;
-  }
-};
+    try {
+      const { data } = await api.post(`/professor/courses/${courseId}/materials`, materialData, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      toast.success("Study material uploaded!");
+      return data;
+    } catch (error) {
+      console.error("API: uploadStudyMaterial failed", error);
+      toast.error("Failed to upload material.");
+      return null;
+    }
+  };
+
+  // =============================
+  // 🧠 QUIZ FUNCTIONS
+  // =============================
+  const createQuiz = async (quizData) => {
+    try {
+      const { data } = await api.post(`/quizzes`, quizData, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      toast.success("Quiz created!");
+      return data;
+    } catch (error) {
+      console.error("API: createQuiz failed", error);
+      toast.error("Failed to create quiz.");
+      return null;
+    }
+  };
+
+  const fetchQuizzesForCourse = async (courseId) => {
+    try {
+      const { data } = await api.get(`/quizzes/course/${courseId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return data;
+    } catch (error) {
+      console.error("API: fetchQuizzesForCourse failed", error);
+      toast.error("Failed to load quizzes.");
+      return [];
+    }
+  };
+
+  const fetchQuizById = async (quizId) => {
+    try {
+      const { data } = await api.get(`/quizzes/${quizId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return data;
+    } catch (error) {
+      console.error("API: fetchQuizById failed", error);
+      toast.error("Failed to load quiz.");
+      return null;
+    }
+  };
+
+  const submitQuiz = async (quizId, answers) => {
+    try {
+      const { data } = await api.post(
+        `/quizzes/${quizId}/submit`,
+        { answers },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      return data;
+    } catch (error) {
+      console.error("API: submitQuiz failed", error);
+      toast.error("Failed to submit quiz.");
+      return null;
+    }
+  };
 
   // =============================
   // 🛠️ ADMIN FUNCTIONS
   // =============================
-
   const fetchAllUsersAdmin = useCallback(async () => {
     try {
       const { data } = await api.get('/admin/users', {
@@ -419,26 +475,24 @@ export const AppProvider = ({ children }) => {
   };
 
   const createAssignment = async (assignmentData, isMultipart = false) => {
-  try {
-    const headers = isMultipart
-      ? { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" }
-      : { Authorization: `Bearer ${token}` };
+    try {
+      const headers = isMultipart
+        ? { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" }
+        : { Authorization: `Bearer ${token}` };
 
-    const { data } = await api.post("/assignments", assignmentData, { headers });
-    toast.success("Assignment created!");
-    return data;
-  } catch (error) {
-    console.error("API: createAssignment failed", error);
-    toast.error("Failed to create assignment.");
-    return null;
-  }
-};
-
+      const { data } = await api.post("/assignments", assignmentData, { headers });
+      toast.success("Assignment created!");
+      return data;
+    } catch (error) {
+      console.error("API: createAssignment failed", error);
+      toast.error("Failed to create assignment.");
+      return null;
+    }
+  };
 
   // =============================
   // 🌍 CONTEXT VALUE
   // =============================
-
   const value = {
     user,
     token,
@@ -469,6 +523,11 @@ export const AppProvider = ({ children }) => {
     deleteCourse,
     updateUserProfile,
     createAssignment,
+    // ✅ QUIZZES
+    createQuiz,
+    fetchQuizzesForCourse,
+    fetchQuizById,
+    submitQuiz,
   };
 
   return (
