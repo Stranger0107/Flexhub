@@ -27,6 +27,7 @@ app.use('/api/professor', require('./routes/professorRoutes.js'));
 app.use('/api/student', require('./routes/studentRoutes.js'));
 app.use('/api/courses', require('./routes/courses.js'));
 app.use('/api/assignments', require('./routes/assignments.js'));
+app.use('/uploads', express.static('uploads'));
 
 // ✅ Test route
 app.get('/', (req, res) => {

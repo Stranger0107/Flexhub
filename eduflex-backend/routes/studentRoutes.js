@@ -6,7 +6,8 @@ const {
   getCourseAssignments,
   submitAssignment,
   getMyGrades,
-  getStudentDashboard
+  getStudentDashboard,
+  getMyAssignments
 } = require('../controllers/studentController.js');
 
 router.use(authenticate);
@@ -17,5 +18,6 @@ router.get('/assignments/:courseId', getCourseAssignments);
 router.post('/assignments/:assignmentId/submit', submitAssignment);
 router.get('/grades', getMyGrades);
 router.get('/dashboard', getStudentDashboard); // ✅ THIS IS ESSENTIAL
+router.get('/assignments', getMyAssignments); // ✅ new
 
 module.exports = router;

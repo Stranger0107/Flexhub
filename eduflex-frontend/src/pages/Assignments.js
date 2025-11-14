@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useApp } from "../contexts/AppContext";
 import { toast } from "react-toastify";
+import { API_BASE_URL} from "../config/api"
 
 function Assignments() {
   const {
@@ -27,6 +28,7 @@ function Assignments() {
           title: item.assignmentTitle || item.title,
           status: item.grade ? 'graded' : (item.submitted ? 'submitted' : 'pending'),
           due: item.dueDate || item.due || 'N/A',
+          attachmentUrl: item.attachmentUrl||null,
         }));
         setAssignments(processed);
       } catch (error) {
@@ -178,6 +180,19 @@ function Assignments() {
                   <p className="text-sm text-gray-500">
                     <strong>Due:</strong> {assignment.due ? new Date(assignment.due).toLocaleDateString() : 'N/A'}
                   </p>
+                  
+                  {assignment.attachmentUrl && (
+                    <a
+                      href={`${API_BASE_URL}${assignment.attachmentUrl}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-block text-green-600 font-medium hover:underline"
+                    >
+                      View Attachment
+                    </a>
+                  )}
+                  
+
                 </div>
                 <div className="text-right">
                   <span className={`px-3 py-1 rounded-full text-sm font-medium text-white

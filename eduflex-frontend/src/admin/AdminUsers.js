@@ -168,7 +168,7 @@ export default function AdminUsers() {
               />
             </div>
             <div className="mb-6">
-            Do <label className="block text-sm font-medium mb-1">Role</label>
+             <label className="block text-sm font-medium mb-1">Role</label>
               <select
                 name="role"
                 value={form.role}
@@ -182,6 +182,7 @@ export default function AdminUsers() {
             </div>
          <div className="flex justify-end gap-3">
               <button
+
                 type="submit"
                 className="bg-indigo-600 text-white px-4 py-2 rounded font-medium hover:bg-indigo-700"
               >

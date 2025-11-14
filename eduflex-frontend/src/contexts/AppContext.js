@@ -202,6 +202,20 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  const fetchStudentAssignments = useCallback(async () => {
+  try {
+    const { data } = await api.get('/student/assignments', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return data;
+  } catch (error) {
+    console.error('API: fetchStudentAssignments failed', error);
+    toast.error('Failed to fetch student assignments.');
+    return [];
+  }
+}, [token]);
+
+
   // =============================
   // 👨‍🏫 PROFESSOR FUNCTIONS
   // =============================
@@ -507,6 +521,7 @@ export const AppProvider = ({ children }) => {
     fetchStudentDashboard,
     fetchMyGrades,
     submitAssignment,
+    fetchStudentAssignments,
     fetchMyProfessorCourses,
     fetchProfessorAssignments,
     fetchProfessorCourseById,

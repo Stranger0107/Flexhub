@@ -143,10 +143,49 @@ const getStudentDashboard = async (req, res) => {
   }
 };
 
+// @desc    Get all assignments from enrolled courses
+// @route   GET /api/student/assignments
+// @access  Private (Student)
+const getMyAssignments = async (req, res) => {
+  try {
+    const studentId = req.user.id;
+
+    // ✅ Find courses where the student is enrolled
+    const enrolledCourses = await Course.find({ students: studentId }).select('_id');
+
+    if (enrolledCourses.length === 0) {
+      return res.status(200).json([]);
+    }
+
+    // ✅ Fetch assignments from those courses
+    const assignments = await Assignment.find({
+      course: { $in: enrolledCourses.map(c => c._id) },
+    })
+      .populate('course', 'title')
+      .sort({ dueDate: 1 })
+      .lean();
+
+    // ✅ Add full file URLs
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    assignments.forEach(a => {
+      if (a.attachmentUrl && !a.attachmentUrl.startsWith('http')) {
+        a.attachmentUrl = `${baseUrl}${a.attachmentUrl}`;
+      }
+    });
+
+    res.json(assignments);
+  } catch (error) {
+    console.error('Error in getMyAssignments:', error);
+    res.status(500).json({ message: 'Server error fetching assignments' });
+  }
+};
+
+
 module.exports = {
   getMyCourses,
   getCourseAssignments,
   submitAssignment,
   getMyGrades,
   getStudentDashboard, // ✅ must be exported
+  getMyAssignments
 };
