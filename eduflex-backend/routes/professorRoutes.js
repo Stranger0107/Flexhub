@@ -32,7 +32,9 @@ router.post('/courses', createCourse);
 router.get('/courses/:id', getCourseById);
 router.put('/courses/:id', updateCourse);
 router.delete('/courses/:id', deleteCourse);
-router.post('/courses/:id/materials', uploadStudyMaterial);
+
+// ✅ Added 'upload.single' middleware here
+router.post('/courses/:id/materials', upload.single('file'), uploadStudyMaterial);
 
 // --- Assignments ---
 router.get('/assignments', getMyAssignments);

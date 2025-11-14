@@ -3,7 +3,6 @@ const Course = require('../models/Course');
 const Assignment = require('../models/Assignment');
 const path = require('path');
 
-
 // =========================================
 // 📚 Upload Study Material (File Upload)
 // =========================================
@@ -15,15 +14,17 @@ exports.uploadStudyMaterial = async (req, res) => {
     const course = await Course.findById(courseId);
     if (!course) return res.status(404).json({ message: 'Course not found' });
 
-    // Only the professor who owns this course can upload
     if (String(course.professor) !== String(req.user.id)) {
       return res.status(403).json({ message: 'Not authorized to upload materials for this course' });
     }
 
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
 
-    const filePath = `/uploads/materials/${courseId}/${req.file.filename}`;
-    const newMaterial = { title, fileUrl: filePath };
+    const rootDir = path.join(__dirname, '..');
+    const relativePath = path.relative(rootDir, req.file.path);
+    const fileUrl = '/' + relativePath.split(path.sep).join('/');
+
+    const newMaterial = { title, fileUrl };
 
     course.materials.push(newMaterial);
     await course.save();
@@ -76,7 +77,10 @@ exports.getMyCourses = async (req, res) => {
 // ============================
 exports.getCourseById = async (req, res) => {
   try {
-    const course = await Course.findById(req.params.id);
+    // ✅ FIX: Populate students so frontend gets names/emails, not just IDs
+    const course = await Course.findById(req.params.id)
+      .populate('students', 'name email'); 
+
     if (!course) return res.status(404).json({ error: 'Course not found' });
     if (String(course.professor) !== String(req.user.id)) {
       return res.status(403).json({ error: 'Not authorized' });
@@ -153,7 +157,8 @@ exports.getMyAssignments = async (req, res) => {
     const courses = await Course.find({ professor: req.user.id });
     const assignments = await Assignment.find({
       course: { $in: courses.map(c => c._id) },
-    });
+    }).populate('submissions.student', 'name email');
+
     res.json(assignments);
   } catch (err) {
     console.error('Error fetching assignments:', err);
@@ -166,14 +171,22 @@ exports.getMyAssignments = async (req, res) => {
 // ============================
 exports.gradeAssignment = async (req, res) => {
   try {
-    const { grade, feedback } = req.body;
+    console.log(`📝 [Grade] Assignment: ${req.params.id}, Student: ${req.body.studentId}, Grade: ${req.body.grade}`);
+    
+    const { grade, feedback, studentId } = req.body;
     const assignment = await Assignment.findById(req.params.id);
-    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+    
+    if (!assignment) {
+      return res.status(404).json({ error: 'Assignment not found' });
+    }
 
     const submission = assignment.submissions.find(
-      (s) => String(s.student) === String(req.body.studentId)
+      (s) => String(s.student) === String(studentId)
     );
-    if (!submission) return res.status(404).json({ error: 'Submission not found' });
+
+    if (!submission) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
 
     submission.grade = grade;
     submission.feedback = feedback;
@@ -181,7 +194,7 @@ exports.gradeAssignment = async (req, res) => {
 
     res.json({ message: 'Grade updated successfully' });
   } catch (err) {
-    console.error('Error grading assignment:', err);
+    console.error('🔥 Error grading assignment:', err);
     res.status(500).json({ error: 'Server error grading assignment' });
   }
 };
@@ -208,33 +221,5 @@ exports.updateProfessorProfile = async (req, res) => {
   } catch (err) {
     console.error('Error updating profile:', err.message);
     res.status(500).json({ error: 'Server error while updating profile' });
-  }
-};
-
-// ============================
-// ✅ Upload Study Material
-// ============================
-exports.uploadStudyMaterial = async (req, res) => {
-  try {
-    const { title, url } = req.body;
-    const course = await Course.findById(req.params.id);
-
-    if (!course) return res.status(404).json({ error: 'Course not found' });
-    if (String(course.professor) !== String(req.user.id)) {
-      return res.status(403).json({ error: 'Not authorized to upload materials' });
-    }
-
-    if (!title || !url) {
-      return res.status(400).json({ error: 'Title and URL are required' });
-    }
-
-    const newMaterial = { title, fileUrl: url };
-    course.materials = [...(course.materials || []), newMaterial];
-    await course.save();
-
-    res.json({ message: 'Material added successfully', course });
-  } catch (err) {
-    console.error('Error uploading study material:', err);
-    res.status(500).json({ error: 'Server error uploading material' });
   }
 };

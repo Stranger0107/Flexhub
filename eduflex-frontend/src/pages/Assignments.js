@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { useApp } from "../contexts/AppContext";
 import { toast } from "react-toastify";
-import { API_BASE_URL} from "../config/api"
+import { API_BASE_URL } from "../config/api";
 
 function Assignments() {
   const {
     user,
-    getMyGrades,             // API: get student's assignments + grades
-    submitAssignment,        // API: submit/turn in assignment
+    fetchStudentAssignments,
+    submitAssignment,
   } = useApp();
 
   const [assignments, setAssignments] = useState([]);
-  const [filter, setFilter] = useState("all"); // all, pending, submitted, graded
-  const [sortBy, setSortBy] = useState("latest"); // latest, earliest, title, status
+  const [filter, setFilter] = useState("all"); 
+  const [sortBy, setSortBy] = useState("latest");
   const [selectedFile, setSelectedFile] = useState({});
   const [submissionText, setSubmissionText] = useState({});
   const [loadingState, setLoadingState] = useState({ page: true, submitting: {} });
@@ -21,26 +21,38 @@ function Assignments() {
     const fetchMyAssignments = async () => {
       setLoadingState(s => ({ ...s, page: true }));
       try {
-        const fetchedData = await getMyGrades();
-        const processed = (fetchedData || []).map(item => ({
-          ...item,
-          id: item.assignmentId || item.id,
-          title: item.assignmentTitle || item.title,
-          status: item.grade ? 'graded' : (item.submitted ? 'submitted' : 'pending'),
-          due: item.dueDate || item.due || 'N/A',
-          attachmentUrl: item.attachmentUrl||null,
-        }));
+        const fetchedData = await fetchStudentAssignments();
+        const processed = (fetchedData || []).map(item => {
+          let courseTitle = 'N/A';
+          if (item.course) {
+            if (typeof item.course === 'object' && item.course.title) {
+              courseTitle = item.course.title;
+            } else if (typeof item.course === 'string') {
+              courseTitle = item.course;
+            }
+          }
+
+          return {
+            ...item,
+            id: item.assignmentId || item._id,
+            title: item.title || item.assignmentTitle,
+            status: item.status || 'pending',
+            course: courseTitle,
+            due: item.dueDate || item.due || 'N/A',
+            attachmentUrl: item.attachmentUrl || null,
+          };
+        });
         setAssignments(processed);
       } catch (error) {
+        console.error("Assignment fetch error:", error);
         toast.error("Failed to fetch assignments.");
       } finally {
         setLoadingState(s => ({ ...s, page: false }));
       }
     };
     if (user) fetchMyAssignments();
-  }, [user, getMyGrades]);
+  }, [user, fetchStudentAssignments]);
 
-  // Sort logic
   const sortAssignments = arr => {
     let sorted = [...arr];
     if (sortBy === "latest" || sortBy === "earliest") {
@@ -48,20 +60,18 @@ function Assignments() {
         const aTime = a.due && Date.parse(a.due) ? new Date(a.due) : new Date(0);
         const bTime = b.due && Date.parse(b.due) ? new Date(b.due) : new Date(0);
         return sortBy === "latest"
-          ? bTime - aTime // latest first
+          ? bTime - aTime
           : aTime - bTime;
       });
     } else if (sortBy === "title") {
       sorted.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
     } else if (sortBy === "status") {
-      // Graded > Submitted > Pending
       const order = { graded: 1, submitted: 2, pending: 3 };
       sorted.sort((a, b) => (order[a.status] || 4) - (order[b.status] || 4));
     }
     return sorted;
   };
 
-  // Filter logic
   const filteredAssignments = sortAssignments(
     assignments.filter(assignment => {
       if (filter === "all") return true;
@@ -69,7 +79,6 @@ function Assignments() {
     })
   );
 
-  // File and text handlers
   const handleFileChange = (assignmentId, file) => {
     setSelectedFile(prev => ({ ...prev, [assignmentId]: file }));
   };
@@ -77,42 +86,54 @@ function Assignments() {
     setSubmissionText(prev => ({ ...prev, [assignmentId]: text }));
   };
 
-  // Submission
   const handleSubmit = async (assignmentId) => {
     const file = selectedFile[assignmentId];
-    const text = submissionText[assignmentId]?.trim();
+    const text = (submissionText[assignmentId] || "").trim();
 
     if (!file && !text) {
       toast.warning('Please add a file or text before submitting.');
       return;
     }
+    
     setLoadingState(s => ({
       ...s,
       submitting: { ...s.submitting, [assignmentId]: true }
     }));
 
     try {
-      let submissionData;
-      if (file) {
-        submissionData = new FormData();
-        submissionData.append('file', file);
-        if (text) submissionData.append('textSubmission', text);
-      } else {
-        submissionData = { submission: text };
+      const formData = new FormData();
+      
+      // ✅ FIX: Strictly check for file object
+      if (file instanceof File) {
+        formData.append('file', file);
+        console.log('📂 Appending file:', file.name);
       }
-      await submitAssignment(assignmentId, submissionData);
+      
+      // ✅ FIX: Use 'submission' key to match backend
+      if (text) {
+        formData.append('submission', text);
+        console.log('📝 Appending text:', text);
+      }
+      
+      await submitAssignment(assignmentId, formData);
 
       setSelectedFile(prev => ({ ...prev, [assignmentId]: null }));
       setSubmissionText(prev => ({ ...prev, [assignmentId]: "" }));
 
       setAssignments(prev =>
         prev.map(a =>
-          a.id === assignmentId ? { ...a, status: 'submitted', submitted: true } : a
+          a.id === assignmentId ? { 
+            ...a, 
+            status: 'submitted', 
+            submission: file ? file.name : text,
+            submitted: true 
+          } : a
         )
       );
-      toast.success('Assignment submitted successfully!');
+      
+      // Context handles success toast
     } catch (error) {
-      toast.error('Failed to submit assignment.');
+      console.error("Submit error:", error);
     } finally {
       setLoadingState(s => ({
         ...s,
@@ -134,7 +155,6 @@ function Assignments() {
       <h1 className="text-3xl font-bold mb-2">My Assignments</h1>
       <p className="text-gray-600 mb-6">Submit your assignments and track your progress.</p>
 
-      {/* Filters & Sorting */}
       <div className="flex flex-wrap gap-2 mb-8 items-center">
         {["all", "pending", "submitted", "graded"].map(opt => (
           <button
@@ -160,7 +180,6 @@ function Assignments() {
         </select>
       </div>
 
-      {/* Assignments List */}
       <div className="space-y-6">
         {filteredAssignments.length > 0 ? (
           filteredAssignments.map(assignment => (
@@ -170,7 +189,6 @@ function Assignments() {
                 ${assignment.status === 'graded' ? 'border-green-500' :
                   assignment.status === 'submitted' ? 'border-blue-500' : 'border-yellow-500'}`}
             >
-              {/* Assignment Header */}
               <div className="flex flex-wrap justify-between items-start mb-4 gap-4">
                 <div>
                   <h3 className="text-xl font-semibold mb-1">{assignment.title}</h3>
@@ -183,7 +201,7 @@ function Assignments() {
                   
                   {assignment.attachmentUrl && (
                     <a
-                      href={`${API_BASE_URL}${assignment.attachmentUrl}`}
+                      href={assignment.attachmentUrl.startsWith('http') ? assignment.attachmentUrl : `${API_BASE_URL}${assignment.attachmentUrl}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="mt-2 inline-block text-green-600 font-medium hover:underline"
@@ -192,6 +210,7 @@ function Assignments() {
                     </a>
                   )}
                   
+                  <p className="mt-2 text-gray-700">{assignment.description}</p>
 
                 </div>
                 <div className="text-right">
@@ -200,15 +219,14 @@ function Assignments() {
                       assignment.status === 'submitted' ? 'bg-blue-500' : 'bg-yellow-500'}`}>
                     {assignment.status.toUpperCase()}
                   </span>
-                  {assignment.status === 'graded' && assignment.grade && (
+                  {assignment.status === 'graded' && assignment.grade !== undefined && (
                     <div className="mt-2 text-lg font-bold text-green-600">
-                      Grade: {assignment.grade}
+                      Grade: {assignment.grade}/100
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Submission form for pending assignments */}
               {assignment.status === 'pending' && (
                 <div className="bg-gray-50 p-4 rounded border border-gray-200 mt-4">
                   <h4 className="font-semibold mb-3 text-gray-700">Submit Assignment</h4>
@@ -220,7 +238,7 @@ function Assignments() {
                       type="file"
                       onChange={e => handleFileChange(assignment.id, e.target.files[0])}
                       className="block w-full text-sm text-gray-500"
-                      accept=".pdf,.doc,.docx,.txt,.zip"
+                      accept=".pdf,.doc,.docx,.txt,.zip,.jpg,.png"
                       disabled={!!loadingState.submitting[assignment.id]}
                     />
                     {selectedFile[assignment.id] && (
@@ -257,15 +275,22 @@ function Assignments() {
                 </div>
               )}
 
-              {/* If submitted/graded, show summary */}
               {(assignment.status === 'submitted' || assignment.status === 'graded') && (
                 <div className={`mt-4 p-4 rounded border
                   ${assignment.status === 'graded' ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
                   <h4 className="font-semibold mb-2 text-gray-700">Your Submission:</h4>
-                  <p className="text-sm text-gray-600">
-                    {/* Display text/file from real backend data here */}
-                    Submission summary (from backend) appears here.
-                  </p>
+                  {assignment.submission && (
+                    <p className="text-sm text-gray-600 break-all">
+                      {assignment.submission.includes('/uploads/') ? (
+                         <a href={assignment.submission.startsWith('http') ? assignment.submission : `${API_BASE_URL}${assignment.submission}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                           View Submitted File
+                         </a>
+                      ) : (
+                        assignment.submission
+                      )}
+                    </p>
+                  )}
+                  {!assignment.submission && <p className="text-sm italic text-gray-500">Content not available</p>}
                 </div>
               )}
             </div>

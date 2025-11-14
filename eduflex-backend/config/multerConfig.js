@@ -2,20 +2,25 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Dynamic storage for course materials and assignments
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const type = req.uploadType || 'materials'; // default folder
-    const courseId = req.params.id || req.body.courseId;
-    const uploadDir = path.join(__dirname, '..', 'uploads', type, courseId || 'general');
+    const type = req.uploadType || 'materials';
+
+    const folderId =
+      req.params.id ||
+      req.body.courseId ||
+      req.query.courseId ||   // ⭐ NEW — ensures assignment uploads use courseId
+      'general';
+
+    const uploadDir = path.join(__dirname, '..', 'uploads', type, folderId);
 
     fs.mkdirSync(uploadDir, { recursive: true });
     cb(null, uploadDir);
   },
+
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+    const uniqueSuffix = Date.now() + '-' + Math.random().toString(36).slice(2);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
   },
 });
 
@@ -28,12 +33,11 @@ const fileFilter = (req, file, cb) => {
     'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     'image/jpeg',
     'image/png',
+    'text/plain'
   ];
 
   if (allowedTypes.includes(file.mimetype)) cb(null, true);
-  else cb(new Error('Invalid file type! Only PDF, DOC, PPT, and images allowed.'));
+  else cb(new Error('Invalid file type'));
 };
 
-const upload = multer({ storage, fileFilter });
-
-module.exports = upload;
+module.exports = multer({ storage, fileFilter });

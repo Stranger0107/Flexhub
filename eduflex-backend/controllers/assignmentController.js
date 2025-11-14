@@ -1,5 +1,6 @@
 const Assignment = require('../models/Assignment');
 const Course = require('../models/Course');
+const path = require('path'); // ✅ Import path module
 
 // ======================================================
 // 🧾 Create a new assignment (with optional file upload)
@@ -40,8 +41,13 @@ const createAssignment = async (req, res) => {
 
     // ✅ Handle uploaded file (optional)
     if (req.file) {
-      assignmentData.attachmentUrl = `/uploads/assignments/${courseId}/${req.file.filename}`;
-
+      // Robust URL construction:
+      // 1. Get path relative to the backend root (e.g., 'uploads/assignments/courseId/file.pdf')
+      const rootDir = path.join(__dirname, '..'); 
+      const relativePath = path.relative(rootDir, req.file.path);
+      
+      // 2. Convert to URL format (force forward slashes for web compatibility)
+      assignmentData.attachmentUrl = '/' + relativePath.split(path.sep).join('/');
     }
 
     // ✅ Save assignment

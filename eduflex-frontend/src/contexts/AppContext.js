@@ -102,6 +102,20 @@ export const AppProvider = ({ children }) => {
     }
   }, [token]);
 
+  const fetchAllCourses = useCallback(async () => {
+  try {
+    const { data } = await api.get('/courses', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return data;
+  } catch (error) {
+    console.error("API: fetchAllCourses failed", error);
+    toast.error("Failed to fetch courses.");
+    return [];
+  }
+}, [token]);
+
+
   const getAllCourses = useCallback(async () => {
     try {
       const { data } = await api.get('/courses', {
@@ -186,34 +200,66 @@ export const AppProvider = ({ children }) => {
     }
   }, [token]);
 
-  const submitAssignment = async (assignmentId, submissionText) => {
+  // ✅ FIX: Robust submission handler
+  const submitAssignment = async (assignmentId, submissionData) => {
     try {
+      const config = {
+        headers: { Authorization: `Bearer ${token}` }
+      };
+
+      // If sending FormData (file upload), delete Content-Type so the browser sets the boundary
+      if (submissionData instanceof FormData) {
+        // This is the critical fix:
+        delete config.headers['Content-Type']; 
+      }
+
       const { data } = await api.post(
         `/student/assignments/${assignmentId}/submit`,
-        { submission: submissionText },
-        { headers: { Authorization: `Bearer ${token}` } }
+        submissionData,
+        config
       );
       toast.success("Assignment submitted successfully!");
       return data;
     } catch (error) {
       console.error("API: submitAssignment failed", error);
-      toast.error("Failed to submit assignment.");
-      return null;
+      const msg = error.response?.data?.message || error.message;
+      toast.error(`Submit failed: ${msg}`);
+      throw error;
     }
   };
 
   const fetchStudentAssignments = useCallback(async () => {
-  try {
-    const { data } = await api.get('/student/assignments', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return data;
-  } catch (error) {
-    console.error('API: fetchStudentAssignments failed', error);
-    toast.error('Failed to fetch student assignments.');
-    return [];
-  }
-}, [token]);
+    try {
+      const { data } = await api.get('/student/assignments', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return data;
+    } catch (error) {
+      console.error('API: fetchStudentAssignments failed', error);
+      toast.error('Failed to fetch student assignments.');
+      return [];
+    }
+  }, [token]);
+
+  // Used for the Grades page specifically
+  const getStudentGrades = useCallback(async () => {
+    try {
+      const { data } = await api.get('/student/assignments', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return data.filter(a => a.status === 'graded').map(a => ({
+        id: a.assignmentId,
+        assignment: a.title,
+        course: a.course,
+        grade: a.grade >= 90 ? 'A' : a.grade >= 80 ? 'B' : a.grade >= 70 ? 'C' : a.grade >= 60 ? 'D' : 'F',
+        score: `${a.grade}%`,
+        date: a.due
+      }));
+    } catch (error) {
+      console.error("API: getStudentGrades failed", error);
+      return [];
+    }
+  }, [token]);
 
 
   // =============================
@@ -267,6 +313,18 @@ export const AppProvider = ({ children }) => {
       return [];
     }
   }, [token]);
+
+  const getEnrolledStudents = async (courseId) => {
+    try {
+      const { data } = await api.get(`/courses/${courseId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return data.students || [];
+    } catch (error) {
+      console.error("API: getEnrolledStudents failed", error);
+      return [];
+    }
+  };
 
   const createProfessorCourse = async (courseData) => {
     try {
@@ -488,21 +546,30 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  const createAssignment = async (assignmentData, isMultipart = false) => {
-    try {
-      const headers = isMultipart
-        ? { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" }
-        : { Authorization: `Bearer ${token}` };
+  const createAssignment = async (assignmentData, isMultipart = false, courseId) => {
+  try {
+    const headers = { Authorization: `Bearer ${token}` };
 
-      const { data } = await api.post("/assignments", assignmentData, { headers });
-      toast.success("Assignment created!");
-      return data;
-    } catch (error) {
-      console.error("API: createAssignment failed", error);
-      toast.error("Failed to create assignment.");
-      return null;
+    // allow FormData auto boundary
+    if (isMultipart || assignmentData instanceof FormData) {
+      delete headers["Content-Type"];
     }
-  };
+
+    const { data } = await api.post(
+      `/assignments?courseId=${courseId}`,   // ⭐ MUST SEND courseId
+      assignmentData,
+      { headers }
+    );
+
+    toast.success("Assignment created!");
+    return data;
+  } catch (error) {
+    console.error("API: createAssignment failed", error);
+    toast.error("Failed to create assignment.");
+    return null;
+  }
+};
+
 
   // =============================
   // 🌍 CONTEXT VALUE
@@ -518,14 +585,17 @@ export const AppProvider = ({ children }) => {
     enrollInCourse,
     unenrollFromCourse,
     fetchCourseById,
+    fetchAllCourses,
     fetchStudentDashboard,
     fetchMyGrades,
     submitAssignment,
     fetchStudentAssignments,
+    getStudentGrades,
     fetchMyProfessorCourses,
     fetchProfessorAssignments,
     fetchProfessorCourseById,
     fetchAssignmentsForCourse,
+    getEnrolledStudents,
     createProfessorCourse,
     updateProfessorCourse,
     deleteProfessorCourse,

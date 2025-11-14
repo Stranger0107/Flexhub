@@ -1,29 +1,43 @@
 const express = require('express');
 const router = express.Router();
-const upload = require('../config/multerConfig'); // ✅ Multer setup
+const upload = require('../config/multerConfig');
 const { authenticate, authorize } = require('../middleware/authMiddleware');
 const {
   createAssignment,
   getAssignmentsForCourse,
 } = require('../controllers/assignmentController');
 
-// ✅ All routes require authentication
+// All routes need authentication
 router.use(authenticate);
 
-// ✅ Create a new assignment (professor or admin only)
-// Supports file upload like PDFs, DOCs, etc.
+// ===============================
+// POST /api/assignments
+// Create assignment + upload file
+// ===============================
 router.post(
   '/',
   authorize('professor', 'admin'),
+
+  // ⭐ Ensure multer knows the upload folder
   (req, res, next) => {
-    req.uploadType = 'assignments'; // tells multer to store in uploads/assignments/
+    req.uploadType = 'assignments';
+
+    // ⭐ FIX: Make courseId available to multer BEFORE file upload
+    if (req.body.courseId) {
+      req.query.courseId = req.body.courseId;
+    }
+
     next();
   },
-  upload.single('file'), // expecting a "file" field in FormData
+
+  upload.single('file'),   // expects FormData field name = "file"
   createAssignment
 );
 
-// ✅ Get all assignments for a specific course (for students, professors, admins)
+// ===============================
+// GET /api/assignments/course/:courseId
+// Get all assignments for a given course
+// ===============================
 router.get('/course/:courseId', getAssignmentsForCourse);
 
 module.exports = router;

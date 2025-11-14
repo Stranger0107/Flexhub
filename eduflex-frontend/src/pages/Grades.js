@@ -3,35 +3,48 @@ import React, { useState, useEffect } from "react";
 import { useApp } from "../contexts/AppContext";
 
 function Grades() {
-  const { grades, gradesLoading, getStudentGrades } = useApp();
+  const { getStudentGrades } = useApp();
+  const [grades, setGrades] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
   const [sortBy, setSortBy] = useState("date");
   const [sortOrder, setSortOrder] = useState("desc");
   const [filterCourse, setFilterCourse] = useState("all");
   const [filterGrade, setFilterGrade] = useState("all");
 
   useEffect(() => {
-    getStudentGrades && getStudentGrades();
+    const fetchGrades = async () => {
+      setLoading(true);
+      const data = await getStudentGrades();
+      setGrades(data || []);
+      setLoading(false);
+    };
+    fetchGrades();
   }, [getStudentGrades]);
 
   // Unique courses for filter
   const uniqueCourses = [
-    ...new Set((grades || []).map(grade => grade.course)),
+    ...new Set(grades.map(grade => grade.course)),
   ];
 
   // Sort and filter grades
-  const filteredAndSortedGrades = (grades || [])
+  const filteredAndSortedGrades = grades
     .filter(grade => {
       const matchesCourse =
         filterCourse === "all" || grade.course === filterCourse;
-      const matchesGrade =
-        filterGrade === "all" ||
-        (filterGrade === "A" && ["A+", "A", "A-"].includes(grade.grade)) ||
-        (filterGrade === "B" && ["B+", "B", "B-"].includes(grade.grade)) ||
-        (filterGrade === "C" && ["C+", "C", "C-"].includes(grade.grade)) ||
-        (filterGrade === "below-C" &&
-          !["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-"].includes(
-            grade.grade
-          ));
+      
+      // Simple grade filtering logic based on letters derived from score
+      // Assumed mapping: A (90-100), B (80-89), C (70-79), D (60-69), F (<60)
+      const matchesGrade = (() => {
+          if (filterGrade === "all") return true;
+          const g = grade.grade; // 'A', 'B', etc. from context transform
+          if (filterGrade === "A") return g === 'A';
+          if (filterGrade === "B") return g === 'B';
+          if (filterGrade === "C") return g === 'C';
+          if (filterGrade === "below-C") return ['D', 'F'].includes(g);
+          return true;
+      })();
+
       return matchesCourse && matchesGrade;
     })
     .sort((a, b) => {
@@ -45,26 +58,9 @@ function Grades() {
           aValue = a.course?.toLowerCase();
           bValue = b.course?.toLowerCase();
           break;
-        case "grade":
-          const gradeValues = {
-            "A+": 97,
-            A: 93,
-            "A-": 90,
-            "B+": 87,
-            B: 83,
-            "B-": 80,
-            "C+": 77,
-            C: 73,
-            "C-": 70,
-            D: 65,
-            F: 50,
-          };
-          aValue = gradeValues[a.grade] || 0;
-          bValue = gradeValues[b.grade] || 0;
-          break;
         case "score":
-          aValue = parseInt(a.score?.replace("%", "")) || 0;
-          bValue = parseInt(b.score?.replace("%", "")) || 0;
+          aValue = parseInt(a.score.replace("%", "")) || 0;
+          bValue = parseInt(b.score.replace("%", "")) || 0;
           break;
         default:
           aValue = a.date;
@@ -79,7 +75,7 @@ function Grades() {
     if (filteredAndSortedGrades.length === 0)
       return { average: 0, highest: 0, lowest: 0, totalAssignments: 0 };
     const scores = filteredAndSortedGrades.map(
-      grade => parseInt(grade.score?.replace("%", "")) || 0
+      grade => parseInt(grade.score.replace("%", "")) || 0
     );
     const average = Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
     const highest = Math.max(...scores);
@@ -96,19 +92,19 @@ function Grades() {
 
   // Grade color helpers
   const getGradeColor = grade => {
-    if (["A+", "A", "A-"].includes(grade)) return "#10b981";
-    if (["B+", "B", "B-"].includes(grade)) return "#3b82f6";
-    if (["C+", "C", "C-"].includes(grade)) return "#f59e0b";
+    if (["A"].includes(grade)) return "#10b981";
+    if (["B"].includes(grade)) return "#3b82f6";
+    if (["C"].includes(grade)) return "#f59e0b";
     return "#ef4444";
   };
   const getGradeBackground = grade => {
-    if (["A+", "A", "A-"].includes(grade)) return "#f0fdf4";
-    if (["B+", "B", "B-"].includes(grade)) return "#eff6ff";
-    if (["C+", "C", "C-"].includes(grade)) return "#fefce8";
+    if (["A"].includes(grade)) return "#f0fdf4";
+    if (["B"].includes(grade)) return "#eff6ff";
+    if (["C"].includes(grade)) return "#fefce8";
     return "#fef2f2";
   };
 
-  if (gradesLoading) {
+  if (loading) {
     return (
       <div style={{ padding: "2rem", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ textAlign: "center" }}>
@@ -192,7 +188,7 @@ function Grades() {
           boxShadow: "0 4px 6px rgba(139, 92, 246, 0.3)"
         }}>
           <div style={{ fontSize: "2rem", fontWeight: "bold" }}>{stats.totalAssignments}</div>
-          <div style={{ fontSize: "0.9rem", opacity: 0.9 }}>Total Assignments</div>
+          <div style={{ fontSize: "0.9rem", opacity: 0.9 }}>Assignments Graded</div>
         </div>
       </div>
 
@@ -243,9 +239,9 @@ function Grades() {
                 minWidth: "150px"
               }}>
               <option value="all">All Grades</option>
-              <option value="A">A Grades (A+, A, A-)</option>
-              <option value="B">B Grades (B+, B, B-)</option>
-              <option value="C">C Grades (C+, C, C-)</option>
+              <option value="A">A (90-100)</option>
+              <option value="B">B (80-89)</option>
+              <option value="C">C (70-79)</option>
               <option value="below-C">Below C</option>
             </select>
           </div>
@@ -266,7 +262,6 @@ function Grades() {
               }}>
               <option value="date">Date</option>
               <option value="course">Course</option>
-              <option value="grade">Grade</option>
               <option value="score">Score</option>
             </select>
           </div>
@@ -381,7 +376,7 @@ function Grades() {
           <div style={{ textAlign: "center", padding: "3rem", color: "#666" }}>
             <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>📊</div>
             <h3>No grades found</h3>
-            <p>No grades match your current filters.</p>
+            <p>No graded assignments match your current filters.</p>
           </div>
         )}
       </div>

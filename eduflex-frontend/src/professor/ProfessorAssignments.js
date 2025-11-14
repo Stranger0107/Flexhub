@@ -1,104 +1,306 @@
-// src/professor/ProfessorAssignments.js
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useApp } from "../contexts/AppContext";
 import { toast } from "react-toastify";
+import { API_BASE_URL } from "../config/api";
+
+// Helper to safely extract an ID string
+const getStudentId = (student) => {
+  if (!student) return null;
+  if (typeof student === 'string') return student;
+  return String(student._id || student.id);
+};
 
 export default function ProfessorAssignments() {
   const {
     user,
     authLoading: contextLoading,
-    fetchAssignmentsForCourse,
-    fetchMyProfessorCourses,
+    fetchProfessorAssignments,
+    fetchProfessorCourseById,
+    gradeSubmission,
   } = useApp();
 
   const [assignments, setAssignments] = useState([]);
-  const [selectedAssignment, setSelectedAssignment] = useState(null);
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState(null);
+  const [displayStudents, setDisplayStudents] = useState([]);
+  const [gradingState, setGradingState] = useState({});
   const [isLoading, setIsLoading] = useState(true);
 
-  // ✅ Fetch all assignments for professor
-  useEffect(() => {
-    const fetchAllAssignments = async () => {
-      setIsLoading(true);
-      try {
-        const courses = await fetchMyProfessorCourses();
-        const allAssignments = [];
-        for (const c of courses) {
-          const courseAssignments = await fetchAssignmentsForCourse(c._id);
-          (courseAssignments || []).forEach((a) =>
-            allAssignments.push({ ...a, courseTitle: c.title })
-          );
-        }
-        setAssignments(allAssignments);
-      } catch (err) {
-        toast.error("Failed to load assignments.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  // Get latest object from state
+  const selectedAssignment = useMemo(
+    () => assignments.find((a) => a._id === selectedAssignmentId) || null,
+    [assignments, selectedAssignmentId]
+  );
 
-    if (!contextLoading && user) fetchAllAssignments();
-  }, [user, contextLoading, fetchAssignmentsForCourse, fetchMyProfessorCourses]);
-
-  const openAssignment = (assignment) => {
-    setSelectedAssignment(assignment);
+  // 1. Load Assignments
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const data = await fetchProfessorAssignments();
+      setAssignments(data || []);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load assignments.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  if (isLoading || contextLoading) {
-    return (
-      <div className="flex items-center justify-center h-80 text-lg">
-        Loading assignments...
-      </div>
+  useEffect(() => {
+    if (!contextLoading && user) loadData();
+    // eslint-disable-next-line
+  }, [user, contextLoading]);
+
+  // 2. Prepare Student List
+  useEffect(() => {
+    const prepareView = async () => {
+      if (!selectedAssignment) return;
+
+      const studentMap = new Map();
+
+      // A. Get Enrolled Students
+      try {
+        const courseId = typeof selectedAssignment.course === "object"
+            ? selectedAssignment.course._id
+            : selectedAssignment.course;
+
+        if (courseId) {
+          const courseData = await fetchProfessorCourseById(courseId);
+          const enrolled = courseData?.students || [];
+          
+          enrolled.forEach(stu => {
+            const id = getStudentId(stu);
+            if (id) {
+              // Store student object, ensuring we have at least an ID and Name
+              const studentObj = typeof stu === 'string' 
+                ? { _id: id, name: "Loading...", email: "..." } 
+                : { ...stu, _id: id };
+              studentMap.set(id, studentObj);
+            }
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching enrolled students", error);
+      }
+
+      // B. Merge Students from Submissions (in case they aren't in enrolled list)
+      if (selectedAssignment.submissions) {
+        selectedAssignment.submissions.forEach(sub => {
+          const stu = sub.student;
+          const id = getStudentId(stu);
+          if (id) {
+            const existing = studentMap.get(id) || { _id: id, name: "Unknown Student", email: "N/A" };
+            // If submission has better student details (populated), update our map
+            if (typeof stu === 'object' && stu.name) {
+                studentMap.set(id, { ...existing, ...stu, _id: id });
+            } else if (!studentMap.has(id)) {
+                studentMap.set(id, existing);
+            }
+          }
+        });
+      }
+
+      const allStudents = Array.from(studentMap.values());
+      setDisplayStudents(allStudents);
+
+      // C. Initialize Grading Inputs
+      const initialGrading = {};
+      allStudents.forEach((stu) => {
+        const sId = stu._id;
+        const sub = selectedAssignment.submissions?.find(s => getStudentId(s.student) === sId);
+        if (sub) {
+          initialGrading[sId] = {
+            grade: sub.grade ?? "",
+            feedback: sub.feedback ?? "",
+          };
+        }
+      });
+      setGradingState(initialGrading);
+    };
+
+    prepareView();
+  }, [selectedAssignment, fetchProfessorCourseById]);
+
+  const handleInput = (studentId, key, value) => {
+    setGradingState((prev) => ({
+      ...prev,
+      [studentId]: { ...prev[studentId], [key]: value },
+    }));
+  };
+
+  const handleGrade = async (studentId) => {
+    const state = gradingState[studentId] || {};
+    const grade = state.grade;
+    const feedback = state.feedback;
+
+    if (grade === "" || grade === undefined) {
+      toast.warning("Please enter a grade.");
+      return;
+    }
+
+    const success = await gradeSubmission(
+      selectedAssignment._id,
+      studentId,
+      { grade: Number(grade), feedback }
     );
+
+    if (success) {
+      await loadData();
+      toast.success("Grade saved!");
+    }
+  };
+
+  const handleRefresh = (e) => {
+    e.stopPropagation();
+    loadData();
+  };
+
+  if (isLoading && assignments.length === 0) {
+    return <div className="flex items-center justify-center h-80 text-lg">Loading assignments...</div>;
   }
 
   return (
-    <div className="p-8 pl-24 min-h-screen">
-      <h2 className="text-2xl font-bold mb-6">Assignments - Grading</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-7">
-        <div>
-          <h3 className="text-lg mb-3 font-bold">All Assignments</h3>
-          <div className="space-y-4">
-            {assignments.length === 0 && (
-              <div className="text-gray-400">No assignments found.</div>
-            )}
-            {assignments.map((a) => (
-              <div
-                key={a._id}
-                className={`p-4 rounded border ${
-                  selectedAssignment && selectedAssignment._id === a._id
-                    ? "border-green-500 bg-green-50"
-                    : "border-gray-300 bg-white"
-                } cursor-pointer hover:border-green-400 transition`}
-                onClick={() => openAssignment(a)}
-              >
-                <div className="text-green-700 font-bold">{a.title}</div>
-                <div className="text-sm text-gray-500">
-                  {a.courseTitle} | Due:{" "}
-                  {a.dueDate
-                    ? new Date(a.dueDate).toLocaleDateString()
-                    : "N/A"}
-                </div>
+    <div className="p-8 pl-24 min-h-screen flex flex-col md:flex-row gap-6">
+      
+      {/* LEFT: Assignment List */}
+      <div className="w-full md:w-1/3 flex flex-col h-[calc(100vh-100px)]">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-bold text-gray-800">Assignments</h2>
+          <button onClick={handleRefresh} className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+            Refresh
+          </button>
+        </div>
+        
+        <div className="space-y-3 overflow-y-auto pr-2 flex-1">
+          {assignments.map((a) => (
+            <div
+              key={a._id}
+              className={`p-4 rounded-lg border shadow-sm cursor-pointer transition-all ${
+                selectedAssignmentId === a._id 
+                  ? "border-green-500 bg-green-50 ring-1 ring-green-500" 
+                  : "border-gray-200 bg-white hover:border-green-300"
+              }`}
+              onClick={() => setSelectedAssignmentId(a._id)}
+            >
+              <div className="font-bold text-gray-800">{a.title}</div>
+              <div className="text-xs text-gray-500 mt-1 truncate">
+                {typeof a.course === 'object' ? a.course.title : 'Course'}
               </div>
-            ))}
-          </div>
+              <div className="mt-2 flex justify-between items-center">
+                <span className="text-xs text-gray-500">Due: {a.dueDate ? new Date(a.dueDate).toLocaleDateString() : "N/A"}</span>
+                <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs font-medium">
+                  {a.submissions?.length || 0} Subs
+                </span>
+              </div>
+            </div>
+          ))}
         </div>
+      </div>
 
-        {/* Submissions Placeholder */}
-        <div>
-          <h3 className="text-lg mb-3 font-bold">
-            Submissions {selectedAssignment ? `for "${selectedAssignment.title}"` : ""}
-          </h3>
-          {!selectedAssignment && (
-            <div className="text-gray-400 p-4">
-              Select an assignment to view submissions.
+      {/* RIGHT: Grading Panel */}
+      <div className="w-full md:w-2/3 bg-white rounded-lg border border-gray-200 shadow-sm p-6 h-[calc(100vh-100px)] overflow-y-auto">
+        {!selectedAssignment ? (
+          <div className="h-full flex flex-col items-center justify-center text-gray-400">
+            <p>Select an assignment to grade.</p>
+          </div>
+        ) : (
+          <>
+            <div className="border-b pb-4 mb-4">
+              <h2 className="text-2xl font-bold text-gray-800">{selectedAssignment.title}</h2>
+              <div className="mt-2 flex gap-4 text-sm text-gray-500">
+                <span>Due: {new Date(selectedAssignment.dueDate).toLocaleDateString()}</span>
+                <span>Total Students: {displayStudents.length}</span>
+              </div>
             </div>
-          )}
-          {selectedAssignment && (
-            <div className="text-gray-400 p-4">
-              No submissions yet (feature coming soon).
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase">Student</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase">File</th>
+                    <th className="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase">Grade</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase">Feedback</th>
+                    <th className="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {displayStudents.map((stu, index) => {
+                    // ✅ FIX: Fallback to index to guarantee unique key
+                    const studentId = stu._id || `temp-${index}`;
+                    
+                    const submission = selectedAssignment.submissions?.find(s => getStudentId(s.student) === studentId);
+                    const isSubmitted = !!submission;
+                    const isGraded = submission && submission.grade !== undefined && submission.grade !== null;
+
+                    return (
+                      <tr key={studentId} className="hover:bg-gray-50 transition">
+                        <td className="px-4 py-3">
+                          <div className="text-sm font-medium text-gray-900">{stu.name}</div>
+                          <div className="text-xs text-gray-500">{stu.email}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {isGraded ? (
+                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Graded</span>
+                          ) : isSubmitted ? (
+                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">Submitted</span>
+                          ) : (
+                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-500">Pending</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">
+                          {isSubmitted ? (
+                            submission.submission.includes('/uploads') ? (
+                              <a href={`${API_BASE_URL}${submission.submission}`} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+                                📄 View
+                              </a>
+                            ) : (
+                              <span className="truncate block max-w-[120px]" title={submission.submission}>{submission.submission}</span>
+                            )
+                          ) : (
+                            <span className="text-gray-300">---</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <input
+                            type="number" min="0" max="100"
+                            disabled={!isSubmitted}
+                            value={gradingState[studentId]?.grade || ""}
+                            onChange={(e) => handleInput(studentId, 'grade', e.target.value)}
+                            className="w-16 border border-gray-300 rounded px-2 py-1 text-center text-sm focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <input
+                            type="text"
+                            disabled={!isSubmitted}
+                            placeholder="Feedback..."
+                            value={gradingState[studentId]?.feedback || ""}
+                            onChange={(e) => handleInput(studentId, 'feedback', e.target.value)}
+                            className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            onClick={() => handleGrade(studentId)}
+                            disabled={!isSubmitted}
+                            className={`text-xs px-3 py-1.5 rounded text-white transition
+                              ${isSubmitted ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-300 cursor-not-allowed'}`}
+                          >
+                            Save
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {displayStudents.length === 0 && (
+                    <tr><td colSpan="6" className="px-4 py-8 text-center text-gray-500">No students found.</td></tr>
+                  )}
+                </tbody>
+              </table>
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
     </div>
   );
