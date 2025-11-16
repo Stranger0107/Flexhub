@@ -1,6 +1,7 @@
 const Assignment = require('../models/Assignment');
 const Course = require('../models/Course');
-const path = require('path'); // ✅ Import path module
+const path = require('path'); // For file system operations
+const fs = require('fs'); // For file system operations
 
 // ======================================================
 // 🧾 Create a new assignment (with optional file upload)
@@ -42,15 +43,13 @@ const createAssignment = async (req, res) => {
     // ✅ Handle uploaded file (optional)
     if (req.file) {
       // 1. Get path relative to the backend root
-      // This finds the ACTUAL path where multer saved the file, regardless of folder
-      const rootDir = path.join(__dirname, '..'); 
+      const rootDir = path.join(__dirname, '..');
       const relativePath = path.relative(rootDir, req.file.path);
-      
+
       // 2. Convert to URL format (force forward slashes for web compatibility)
-      // This fixes the issue if the file ended up in 'general' or if running on Windows
       assignmentData.attachmentUrl = '/' + relativePath.split(path.sep).join('/');
-      
-      console.log("📎 Attachment saved at:", assignmentData.attachmentUrl);
+
+      console.log('📎 Attachment saved at:', assignmentData.attachmentUrl);
     }
 
     // ✅ Save assignment
@@ -101,7 +100,86 @@ const getAssignmentsForCourse = async (req, res) => {
   }
 };
 
+// ======================================================
+// 📄 Get a single assignment by its ID
+// @route   GET /api/assignments/:id
+// @access  Private (Professor or Admin)
+// ======================================================
+// (Also used by students, but auth is checked in the student controller)
+const getAssignmentById = async (req, res) => {
+  try {
+    const assignment = await Assignment.findById(req.params.id).populate(
+      'course',
+      'title'
+    );
+    if (!assignment) {
+      return res.status(404).json({ message: 'Assignment not found' });
+    }
+    // Note: Further auth checks (like if user is enrolled)
+    // are handled by the specific routes that call this
+    res.json(assignment);
+  } catch (error) {
+    console.error('Error fetching assignment by ID:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ======================================================
+// ❌ Delete an assignment
+// @route   DELETE /api/assignments/:id
+// @access  Private (Professor or Admin)
+// ======================================================
+const deleteAssignment = async (req, res) => {
+  try {
+    const assignment = await Assignment.findById(req.params.id);
+
+    if (!assignment) {
+      return res.status(404).json({ message: 'Assignment not found' });
+    }
+
+    // Find the course to check for ownership
+    const course = await Course.findById(assignment.course);
+    if (!course) {
+      return res.status(404).json({ message: 'Associated course not found' });
+    }
+
+    // Check if the user is the professor who owns the course or an admin
+    const isProfessorOwner = course.professor.toString() === req.user.id;
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isProfessorOwner && !isAdmin) {
+      return res
+        .status(403)
+        .json({ message: 'User not authorized to delete this assignment' });
+    }
+
+    // Optional: Delete assignment file attachment if it exists
+    if (assignment.attachmentUrl) {
+      const filePath = path.join(__dirname, '..', assignment.attachmentUrl);
+      fs.unlink(filePath, (err) => {
+        if (err) {
+          console.warn('Could not delete assignment attachment file:', filePath, err.message);
+        } else {
+          console.log('Deleted attachment file:', filePath);
+        }
+      });
+    }
+    
+    // TODO: Also delete all submission files from /uploads/submissions/
+
+    await assignment.deleteOne();
+
+    res.status(200).json({ message: 'Assignment deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting assignment:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// --- Export all functions ---
 module.exports = {
   createAssignment,
   getAssignmentsForCourse,
+  getAssignmentById, // Added this
+  deleteAssignment, // Added this
 };

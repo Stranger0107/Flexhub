@@ -212,9 +212,13 @@ export const AppProvider = ({ children }) => {
         // This is the critical fix:
         delete config.headers['Content-Type']; 
       }
+      
+      // ✅ FIX: Get assignmentId and pass it as a query param for multer
+      // (This assumes your student submission multer config also needs an ID)
+      const url = `/student/assignments/${assignmentId}/submit?assignmentId=${assignmentId}`;
 
       const { data } = await api.post(
-        `/student/assignments/${assignmentId}/submit`,
+        url,
         submissionData,
         config
       );
@@ -528,7 +532,7 @@ export const AppProvider = ({ children }) => {
   };
 
   // =============================
-  // 👤 PROFILE FUNCTIONS
+  // 👤 PROFILE & ASSIGNMENT FUNCTIONS
   // =============================
   const updateUserProfile = async (profileData) => {
     try {
@@ -546,6 +550,9 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  //
+  // ✅ --- THIS IS THE FIX ---
+  //
   const createAssignment = async (assignmentData, isMultipart = false) => {
     try {
       const headers = { Authorization: `Bearer ${token}` };
@@ -555,13 +562,48 @@ export const AppProvider = ({ children }) => {
         delete headers['Content-Type'];
       }
 
-      const { data } = await api.post("/assignments", assignmentData, { headers });
+      // ✅ 1. Get courseId from the FormData object
+      const courseId = assignmentData.get('courseId');
+      
+      // ✅ 2. Create the new URL with courseId as a query parameter
+      // This makes it available to multer *before* the body is parsed
+      const url = `/assignments?courseId=${courseId}`;
+      
+      // We can leave 'courseId' in the FormData body; the controller will
+      // read it from there after multer parses it.
+      
+      const { data } = await api.post(url, assignmentData, { headers });
       toast.success("Assignment created!");
       return data;
     } catch (error) {
       console.error("API: createAssignment failed", error);
       toast.error("Failed to create assignment.");
       return null;
+    }
+  };
+
+  // ✅ NEW: Fetch a single assignment by ID
+  const fetchAssignmentById = async (assignmentId) => {
+    try {
+      const { data } = await api.get(`/assignments/${assignmentId}`);
+      return data;
+    } catch (error) {
+      console.error("API: fetchAssignmentById failed", error);
+      toast.error("Failed to load assignment details.");
+      return null;
+    }
+  };
+
+  // ✅ NEW: Delete an assignment by ID
+  const deleteAssignment = async (assignmentId) => {
+    try {
+      await api.delete(`/assignments/${assignmentId}`);
+      toast.success("Assignment deleted successfully!");
+      return true; // Return true on success
+    } catch (error) {
+      console.error("API: deleteAssignment failed", error);
+      // The api.js interceptor will already show a toast on error
+      return false; // Return false on failure
     }
   };
 
@@ -603,6 +645,8 @@ export const AppProvider = ({ children }) => {
     deleteCourse,
     updateUserProfile,
     createAssignment,
+    fetchAssignmentById, // <-- Added
+    deleteAssignment, // <-- Added
     // ✅ QUIZZES
     createQuiz,
     fetchQuizzesForCourse,

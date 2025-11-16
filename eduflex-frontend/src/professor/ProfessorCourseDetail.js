@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useApp } from "../contexts/AppContext";
 import { useParams, Link } from "react-router-dom";
 import { toast } from "react-toastify";
+import { FaTrash } from 'react-icons/fa'; // 1. Import the delete icon
 
 export default function ProfessorCourseDetail() {
   const { courseId } = useParams();
@@ -12,6 +13,7 @@ export default function ProfessorCourseDetail() {
     createAssignment,
     fetchQuizzesForCourse,
     createQuiz,
+    deleteAssignment, // 2. Get the deleteAssignment function
   } = useApp();
 
   const [course, setCourse] = useState(null);
@@ -107,6 +109,17 @@ export default function ProfessorCourseDetail() {
       setAssignmentFile(null);
       toast.success("Assignment added!");
       fetchAllData();
+    }
+  };
+
+  // 3. Add the delete handler
+  const handleDeleteAssignment = async (assignmentId) => {
+    if (window.confirm('Are you sure you want to delete this assignment? This action cannot be undone.')) {
+      const success = await deleteAssignment(assignmentId);
+      if (success) {
+        // If successful, refresh the assignment list by re-fetching all data
+        fetchAllData();
+      }
     }
   };
 
@@ -222,30 +235,42 @@ export default function ProfessorCourseDetail() {
           courseAssignments.map((a) => (
             <div
               key={a._id}
-              className="bg-indigo-50 border border-indigo-200 rounded-lg mb-3 p-4"
+              className="bg-indigo-50 border border-indigo-200 rounded-lg mb-3 p-4 flex justify-between items-center" // 4. Added flex
             >
-              <Link
-                to={`/professor/assignments/${a._id}`}
-                className="text-blue-600 text-lg font-bold hover:underline"
+              <div> {/* Wrapper for assignment content */}
+                <Link
+                  to={`/professor/assignments/${a._id}`}
+                  className="text-blue-600 text-lg font-bold hover:underline"
+                >
+                  {a.title}
+                </Link>
+                <span className="text-sm text-gray-600 ml-3">
+                  (Due: {new Date(a.dueDate).toLocaleDateString()})
+                </span>
+                {a.attachmentUrl && (
+                  <div className="mt-2">
+                    <a
+                      href={a.attachmentUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-indigo-600 text-sm hover:underline"
+                    >
+                      📎 Download Attachment
+                    </a>
+                  </div>
+                )}
+                <div className="text-sm text-gray-700 mt-1">{a.description}</div>
+              </div>
+              
+              {/* 5. Delete button */}
+              <button
+                onClick={() => handleDeleteAssignment(a._id)}
+                className="text-red-500 hover:text-red-700 transition-colors ml-4"
+                title="Delete Assignment"
               >
-                {a.title}
-              </Link>
-              <span className="text-sm text-gray-600 ml-3">
-                (Due: {new Date(a.dueDate).toLocaleDateString()})
-              </span>
-              {a.attachmentUrl && (
-                <div className="mt-2">
-                  <a
-                    href={a.attachmentUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-indigo-600 text-sm hover:underline"
-                  >
-                    📎 Download Attachment
-                  </a>
-                </div>
-              )}
-              <div className="text-sm text-gray-700 mt-1">{a.description}</div>
+                <FaTrash size={18} />
+              </button>
+
             </div>
           ))
         )}

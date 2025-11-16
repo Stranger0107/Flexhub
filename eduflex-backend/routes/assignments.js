@@ -5,6 +5,8 @@ const { authenticate, authorize } = require('../middleware/authMiddleware');
 const {
   createAssignment,
   getAssignmentsForCourse,
+  getAssignmentById, // <-- Added this
+  deleteAssignment, // <-- Added this
 } = require('../controllers/assignmentController');
 
 // All routes need authentication
@@ -30,7 +32,7 @@ router.post(
     next();
   },
 
-  upload.single('file'),   // expects FormData field name = "file"
+  upload.single('file'), // expects FormData field name = "file"
   createAssignment
 );
 
@@ -39,5 +41,26 @@ router.post(
 // Get all assignments for a given course
 // ===============================
 router.get('/course/:courseId', getAssignmentsForCourse);
+
+// ===============================
+// GET /api/assignments/:id
+// Get a single assignment by its ID
+// =Labels:
+// ===============================
+router.get(
+  '/:id',
+  authenticate, // Auth is already applied by router.use(), but explicit is fine
+  getAssignmentById
+);
+
+// ===============================
+// DELETE /api/assignments/:id
+// Delete an assignment
+// ===============================
+router.delete(
+  '/:id',
+  authorize('professor', 'admin'), // Only profs/admins can delete
+  deleteAssignment
+);
 
 module.exports = router;
