@@ -202,35 +202,46 @@ export const AppProvider = ({ children }) => {
 
   // ✅ FIX: Robust submission handler
   const submitAssignment = async (assignmentId, submissionData) => {
-    try {
-      const config = {
-        headers: { Authorization: `Bearer ${token}` }
-      };
+  try {
+    let formData;
 
-      // If sending FormData (file upload), delete Content-Type so the browser sets the boundary
-      if (submissionData instanceof FormData) {
-        // This is the critical fix:
-        delete config.headers['Content-Type']; 
-      }
-      
-      // ✅ FIX: Get assignmentId and pass it as a query param for multer
-      // (This assumes your student submission multer config also needs an ID)
-      const url = `/student/assignments/${assignmentId}/submit?assignmentId=${assignmentId}`;
-
-      const { data } = await api.post(
-        url,
-        submissionData,
-        config
-      );
-      toast.success("Assignment submitted successfully!");
-      return data;
-    } catch (error) {
-      console.error("API: submitAssignment failed", error);
-      const msg = error.response?.data?.message || error.message;
-      toast.error(`Submit failed: ${msg}`);
-      throw error;
+    // 🔥 If input is already FormData, use it
+    if (submissionData instanceof FormData) {
+      formData = submissionData;
+    } 
+    // 🔥 If input is a file (Blob), convert to FormData correctly
+    else if (submissionData.file) {
+      formData = new FormData();
+      formData.append("file", submissionData.file);   // ⬅️ MUST BE "file"
+    } 
+    // 🔥 If input is text, also send as form-data
+    else {
+      formData = new FormData();
+      formData.append("text", submissionData.text || "");
     }
-  };
+
+    const { data } = await api.post(
+      `/student/assignments/${assignmentId}/submit`,
+      formData,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          // ❗ Let browser set multipart/form-data boundary
+          "Content-Type": undefined,
+        },
+      }
+    );
+
+    toast.success("Assignment submitted successfully!");
+    return data;
+
+  } catch (error) {
+    console.error("API: submitAssignment failed", error);
+    toast.error(error.response?.data?.message || "Submit failed");
+    throw error;
+  }
+};
+
 
   const fetchStudentAssignments = useCallback(async () => {
     try {
@@ -553,34 +564,28 @@ export const AppProvider = ({ children }) => {
   //
   // ✅ --- THIS IS THE FIX ---
   //
-  const createAssignment = async (assignmentData, isMultipart = false) => {
-    try {
-      const headers = { Authorization: `Bearer ${token}` };
-      
-      // ✅ CRITICAL FIX: Delete Content-Type so browser sets multipart boundary
-      if (isMultipart || assignmentData instanceof FormData) {
-        delete headers['Content-Type'];
-      }
+  const createAssignment = async (formData) => {
+  try {
+    const courseId = formData.get("courseId");
 
-      // ✅ 1. Get courseId from the FormData object
-      const courseId = assignmentData.get('courseId');
-      
-      // ✅ 2. Create the new URL with courseId as a query parameter
-      // This makes it available to multer *before* the body is parsed
-      const url = `/assignments?courseId=${courseId}`;
-      
-      // We can leave 'courseId' in the FormData body; the controller will
-      // read it from there after multer parses it.
-      
-      const { data } = await api.post(url, assignmentData, { headers });
-      toast.success("Assignment created!");
-      return data;
-    } catch (error) {
-      console.error("API: createAssignment failed", error);
-      toast.error("Failed to create assignment.");
-      return null;
-    }
-  };
+    const { data } = await api.post("/assignments", formData, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "x-course-id": courseId,
+        // ❗ IMPORTANT: Let the browser set multipart/form-data boundary
+        "Content-Type": undefined,
+      },
+    });
+
+    toast.success("Assignment created!");
+    return data;
+  } catch (error) {
+    console.error("API: createAssignment failed", error);
+    toast.error(error.response?.data?.message || "Failed to create assignment.");
+    return null;
+  }
+};
+
 
   // ✅ NEW: Fetch a single assignment by ID
   const fetchAssignmentById = async (assignmentId) => {

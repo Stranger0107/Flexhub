@@ -82,10 +82,14 @@ function Assignments() {
   const handleFileChange = (assignmentId, file) => {
     setSelectedFile(prev => ({ ...prev, [assignmentId]: file }));
   };
+
   const handleTextChange = (assignmentId, text) => {
     setSubmissionText(prev => ({ ...prev, [assignmentId]: text }));
   };
 
+  // ==========================
+  // ⭐ FIXED SUBMIT FUNCTION
+  // ==========================
   const handleSubmit = async (assignmentId) => {
     const file = selectedFile[assignmentId];
     const text = (submissionText[assignmentId] || "").trim();
@@ -94,7 +98,7 @@ function Assignments() {
       toast.warning('Please add a file or text before submitting.');
       return;
     }
-    
+
     setLoadingState(s => ({
       ...s,
       submitting: { ...s.submitting, [assignmentId]: true }
@@ -102,19 +106,19 @@ function Assignments() {
 
     try {
       const formData = new FormData();
-      
-      // ✅ FIX: Strictly check for file object
+
+      // Upload file correctly
       if (file instanceof File) {
-        formData.append('file', file);
-        console.log('📂 Appending file:', file.name);
+        console.log("📂 Appending file:", file.name);
+        formData.append("file", file);
       }
-      
-      // ✅ FIX: Use 'submission' key to match backend
+
+      // ⭐⭐ FIX: This must be "text" so backend can read req.body.text
       if (text) {
-        formData.append('submission', text);
-        console.log('📝 Appending text:', text);
+        console.log("📝 Appending text:", text);
+        formData.append("text", text);
       }
-      
+
       await submitAssignment(assignmentId, formData);
 
       setSelectedFile(prev => ({ ...prev, [assignmentId]: null }));
@@ -123,15 +127,14 @@ function Assignments() {
       setAssignments(prev =>
         prev.map(a =>
           a.id === assignmentId ? { 
-            ...a, 
-            status: 'submitted', 
+            ...a,
+            status: 'submitted',
             submission: file ? file.name : text,
             submitted: true 
           } : a
         )
       );
       
-      // Context handles success toast
     } catch (error) {
       console.error("Submit error:", error);
     } finally {
@@ -155,6 +158,7 @@ function Assignments() {
       <h1 className="text-3xl font-bold mb-2">My Assignments</h1>
       <p className="text-gray-600 mb-6">Submit your assignments and track your progress.</p>
 
+      {/* Filters & Sorting */}
       <div className="flex flex-wrap gap-2 mb-8 items-center">
         {["all", "pending", "submitted", "graded"].map(opt => (
           <button
@@ -180,6 +184,7 @@ function Assignments() {
         </select>
       </div>
 
+      {/* Assignment Cards */}
       <div className="space-y-6">
         {filteredAssignments.length > 0 ? (
           filteredAssignments.map(assignment => (
@@ -198,10 +203,12 @@ function Assignments() {
                   <p className="text-sm text-gray-500">
                     <strong>Due:</strong> {assignment.due ? new Date(assignment.due).toLocaleDateString() : 'N/A'}
                   </p>
-                  
+
                   {assignment.attachmentUrl && (
                     <a
-                      href={assignment.attachmentUrl.startsWith('http') ? assignment.attachmentUrl : `${API_BASE_URL}${assignment.attachmentUrl}`}
+                      href={assignment.attachmentUrl.startsWith('http') 
+                        ? assignment.attachmentUrl 
+                        : `${API_BASE_URL}${assignment.attachmentUrl}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="mt-2 inline-block text-green-600 font-medium hover:underline"
@@ -209,16 +216,17 @@ function Assignments() {
                       View Attachment
                     </a>
                   )}
-                  
-                  <p className="mt-2 text-gray-700">{assignment.description}</p>
 
+                  <p className="mt-2 text-gray-700">{assignment.description}</p>
                 </div>
+
                 <div className="text-right">
                   <span className={`px-3 py-1 rounded-full text-sm font-medium text-white
                     ${assignment.status === 'graded' ? 'bg-green-500' :
                       assignment.status === 'submitted' ? 'bg-blue-500' : 'bg-yellow-500'}`}>
                     {assignment.status.toUpperCase()}
                   </span>
+
                   {assignment.status === 'graded' && assignment.grade !== undefined && (
                     <div className="mt-2 text-lg font-bold text-green-600">
                       Grade: {assignment.grade}/100
@@ -227,9 +235,11 @@ function Assignments() {
                 </div>
               </div>
 
+              {/* Submission Area */}
               {assignment.status === 'pending' && (
                 <div className="bg-gray-50 p-4 rounded border border-gray-200 mt-4">
                   <h4 className="font-semibold mb-3 text-gray-700">Submit Assignment</h4>
+
                   <div className="mb-4">
                     <label className="block mb-1 text-sm font-medium text-gray-600">
                       Upload File (optional)
@@ -248,10 +258,13 @@ function Assignments() {
                           type="button"
                           className="ml-3 text-red-600 text-xs"
                           onClick={() => handleFileChange(assignment.id, null)}
-                        >Remove</button>
+                        >
+                          Remove
+                        </button>
                       </div>
                     )}
                   </div>
+
                   <div className="mb-4">
                     <label className="block mb-1 text-sm font-medium text-gray-600">
                       Text Submission (optional)
@@ -261,14 +274,15 @@ function Assignments() {
                       onChange={e => handleTextChange(assignment.id, e.target.value)}
                       placeholder="Write your submission here..."
                       rows={4}
-                      className="block w-full p-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 resize-vertical disabled:bg-gray-100"
+                      className="block w-full p-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                       disabled={!!loadingState.submitting[assignment.id]}
                     />
                   </div>
+
                   <button
                     onClick={() => handleSubmit(assignment.id)}
                     disabled={!!loadingState.submitting[assignment.id]}
-                    className="px-5 py-2 bg-green-600 text-white rounded-md font-semibold hover:bg-green-700 transition duration-200 disabled:opacity-50"
+                    className="px-5 py-2 bg-green-600 text-white rounded-md font-semibold hover:bg-green-700 disabled:opacity-50"
                   >
                     {loadingState.submitting[assignment.id] ? 'Submitting...' : 'Submit'}
                   </button>
@@ -282,21 +296,32 @@ function Assignments() {
                   {assignment.submission && (
                     <p className="text-sm text-gray-600 break-all">
                       {assignment.submission.includes('/uploads/') ? (
-                         <a href={assignment.submission.startsWith('http') ? assignment.submission : `${API_BASE_URL}${assignment.submission}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                           View Submitted File
-                         </a>
-                      ) : (
-                        assignment.submission
-                      )}
+                        <a
+                          href={
+                            assignment.submission.startsWith("http")
+                              ? assignment.submission
+                              : `${API_BASE_URL}${assignment.submission}`
+                          }
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline"
+                        >
+                          View Submitted File
+                        </a>
+                      ) : assignment.submission}
                     </p>
                   )}
-                  {!assignment.submission && <p className="text-sm italic text-gray-500">Content not available</p>}
+                  {!assignment.submission && (
+                    <p className="text-sm italic text-gray-500">Content not available</p>
+                  )}
                 </div>
               )}
             </div>
           ))
         ) : (
-          <p className="text-gray-500 text-center col-span-full">No assignments found for this filter.</p>
+          <p className="text-gray-500 text-center col-span-full">
+            No assignments found for this filter.
+          </p>
         )}
       </div>
     </div>

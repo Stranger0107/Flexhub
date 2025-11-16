@@ -33,68 +33,83 @@ const getCourseAssignments = async (req, res) => {
 // @access  Private (Student)
 const submitAssignment = async (req, res) => {
   try {
-    const assignmentId = req.params.id; // Matches route /assignments/:id/submit
-    console.log(`📝 [Controller] Submit called. Assignment: ${assignmentId}, User: ${req.user.id}`);
-    
-    // Debug Logs
-    if (req.file) console.log(`📂 [Controller] File received: ${req.file.filename}`);
-    else console.log(`⚠️ [Controller] No file in req.file`);
-    
+    const assignmentId = req.params.id;
+
+    console.log(`📩 Submit Assignment | assignmentId: ${assignmentId}, student: ${req.user.id}`);
+
     const body = req.body || {};
     let submissionContent = null;
 
-    // 1. Handle File
+    // ============================
+    // 🔥 1. Handle FILE SUBMISSION
+    // ============================
     if (req.file) {
-      // Construct URL path relative to project root
-      // We saved to: uploads/submissions/:id/filename
-      submissionContent = `/uploads/submissions/${assignmentId}/${req.file.filename}`;
-    } 
-    // 2. Handle Text
-    else {
-      submissionContent = body.submission || body.textSubmission || body.text;
+      const baseUrl = `${req.protocol}://${req.get("host")}`;
+
+      // final accessible URL
+      submissionContent = `${baseUrl}/uploads/submissions/${assignmentId}/${req.file.filename}`;
+
+      console.log("📂 File received:", submissionContent);
+    }
+
+    // ============================
+    // 📝 2. Handle TEXT SUBMISSION
+    // ============================
+    if (!submissionContent) {
+      submissionContent =
+        body.submission ||
+        body.textSubmission ||
+        body.text ||
+        null;
     }
 
     if (!submissionContent) {
-      console.error("❌ [Controller] No content. Body:", body);
-      return res.status(400).json({ message: 'No submission content provided (file or text).' });
+      console.error("❌ No submission file or text provided");
+      return res.status(400).json({ message: 'No submission content provided.' });
     }
 
-    // Find Assignment
+    // ============================
+    // 📘 Fetch Assignment + Course
+    // ============================
     const assignment = await Assignment.findById(assignmentId);
-    if (!assignment) {
-      return res.status(404).json({ message: 'Assignment not found' });
-    }
+    if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
 
-    // Find Course & Check Enrollment
     const course = await Course.findById(assignment.course);
-    if (!course) {
-      return res.status(404).json({ message: 'Course not found' });
-    }
+    if (!course) return res.status(404).json({ message: 'Course not found' });
 
-    const userId = req.user.id || req.user._id;
-    const isEnrolled = course.students.some(id => id.toString() === userId.toString());
-
+    const studentId = req.user.id;
+    const isEnrolled = course.students.some(id => id.toString() === studentId.toString());
     if (!isEnrolled) {
-      return res.status(403).json({ message: 'Not enrolled in this course' });
+      return res.status(403).json({ message: 'You are not enrolled in this course' });
     }
 
-    // Update Submission Array
-    const existingIndex = assignment.submissions.findIndex(s => s.student.toString() === userId.toString());
+    // ============================
+    // 🧾 3. Save & Update Submission Entry
+    // ============================
+    const existingIndex = assignment.submissions.findIndex(
+      (s) => s.student.toString() === studentId.toString()
+    );
 
     if (existingIndex !== -1) {
       assignment.submissions[existingIndex].submission = submissionContent;
       assignment.submissions[existingIndex].submittedAt = Date.now();
+      assignment.submissions[existingIndex].grade = null;       // reset grade if resubmitted
+      assignment.submissions[existingIndex].feedback = "";
     } else {
       assignment.submissions.push({
-        student: userId,
+        student: studentId,
         submission: submissionContent,
         submittedAt: Date.now(),
       });
     }
 
     await assignment.save();
-    console.log("✅ [Controller] Saved successfully.");
-    res.json({ message: 'Assignment submitted successfully', assignment });
+
+    console.log("✅ Submission saved.");
+    res.json({
+      message: 'Assignment submitted successfully',
+      submissionUrl: submissionContent,
+    });
 
   } catch (error) {
     console.error('🔥 Error in submitAssignment:', error);
@@ -147,9 +162,7 @@ const getStudentDashboard = async (req, res) => {
 
     const allGrades = assignments.flatMap((a) =>
       a.submissions
-        .filter(
-          (s) => String(s.student) === studentId && s.grade != null
-        )
+        .filter((s) => String(s.student) === studentId && s.grade != null)
         .map((s) => s.grade)
     );
 
@@ -189,39 +202,44 @@ const getMyAssignments = async (req, res) => {
       .sort({ dueDate: 1 })
       .lean();
 
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+
     const processedAssignments = assignments.map(a => {
-        const mySubmission = a.submissions ? a.submissions.find(s => String(s.student) === String(studentId)) : null;
-        let status = 'pending';
-        let grade = null;
-        let submission = null;
+      const mySubmission = a.submissions
+        ? a.submissions.find(s => String(s.student) === String(studentId))
+        : null;
 
-        if (mySubmission) {
-            submission = mySubmission.submission;
-            if (mySubmission.grade !== undefined && mySubmission.grade !== null) {
-                status = 'graded';
-                grade = mySubmission.grade;
-            } else {
-                status = 'submitted';
-            }
+      let status = 'pending';
+      let grade = null;
+      let submission = null;
+
+      if (mySubmission) {
+        submission = mySubmission.submission;
+        if (mySubmission.grade != null) {
+          status = 'graded';
+          grade = mySubmission.grade;
+        } else {
+          status = 'submitted';
         }
+      }
 
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
-        if (a.attachmentUrl && !a.attachmentUrl.startsWith('http')) {
-            a.attachmentUrl = `${baseUrl}${a.attachmentUrl}`;
-        }
+      // Fix attachmentUrl
+      if (a.attachmentUrl && !a.attachmentUrl.startsWith("http")) {
+        a.attachmentUrl = `${baseUrl}${a.attachmentUrl}`;
+      }
 
-        return {
-            assignmentId: a._id,
-            title: a.title,
-            description: a.description,
-            course: a.course ? a.course.title : 'Unknown Course',
-            courseId: a.course ? a.course._id : null,
-            due: a.dueDate,
-            attachmentUrl: a.attachmentUrl,
-            status,
-            grade,
-            submission
-        };
+      return {
+        assignmentId: a._id,
+        title: a.title,
+        description: a.description,
+        course: a.course?.title,
+        courseId: a.course?._id,
+        due: a.dueDate,
+        attachmentUrl: a.attachmentUrl,
+        status,
+        grade,
+        submission,
+      };
     });
 
     res.json(processedAssignments);
@@ -231,12 +249,11 @@ const getMyAssignments = async (req, res) => {
   }
 };
 
-
 module.exports = {
   getMyCourses,
   getCourseAssignments,
   submitAssignment,
   getMyGrades,
   getStudentDashboard,
-  getMyAssignments
+  getMyAssignments,
 };
