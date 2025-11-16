@@ -1,170 +1,123 @@
-// src/pages/User.js
 import React, { useEffect, useState } from "react";
 import { useApp } from "../contexts/AppContext";
+
 const profilePic =
-  "https://ui-avatars.com/api/?name=User&background=10b981&color=fff&rounded=true&size=128";
+  "https://ui-avatars.com/api/?background=10b981&color=fff&rounded=true&size=128&name=User";
 
 export default function User() {
-  const { user, stats, enrolledCourses, recentGrades, loading } = useApp();
-  const [showInfo, setShowInfo] = useState(true);
+  const {
+    user,
+    loadUserProfile,
+    fetchUserStats,
+    fetchEnrolledCourses,
+    fetchRecentGrades,
+  } = useApp();
+
+  const [stats, setStats] = useState(null);
+  const [enrolledCourses, setEnrolledCourses] = useState([]);
+  const [recentGrades, setRecentGrades] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Optionally fetch user/profile info here if your context doesn't do this already
+    const loadEverything = async () => {
+      setLoading(true);
+
+      await loadUserProfile();
+      const s = await fetchUserStats();
+      const c = await fetchEnrolledCourses();
+      const g = await fetchRecentGrades();
+
+      setStats(s);
+      setEnrolledCourses(c);
+      setRecentGrades(g);
+
+      setLoading(false);
+    };
+
+    loadEverything();
   }, []);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-80 text-lg">
-        Loading profile...
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="flex flex-col items-center justify-center h-96">
-        <div className="text-2xl font-bold text-red-500 mb-6">
-          No user found.
-        </div>
-      </div>
-    );
+  if (loading || !user) {
+    return <div className="flex justify-center items-center h-80">Loading profile...</div>;
   }
 
   return (
     <div className="max-w-4xl mx-auto my-8 p-8 bg-white rounded-xl shadow-lg">
-      <div className="flex gap-8 items-center">
-        <img
-          src={profilePic}
-          alt="User"
-          className="w-32 h-32 rounded-full shadow"
-        />
+      {/* HEADER */}
+      <div className="flex gap-6 items-center">
+        <img src={profilePic} className="w-28 h-28 rounded-full shadow" />
+
         <div>
-          <h1 className="text-3xl font-bold text-green-700 mb-1">
-            {user.name}
-          </h1>
-          <p className="text-gray-600 mb-2">
-            <span className="font-semibold">
-              {user.role && user.role.toUpperCase()}
-            </span>
-            {user.role === "student" && user.year ? ` | ${user.year}` : ""}
+          <h1 className="text-3xl font-bold text-green-700">{user.name}</h1>
+
+          <p className="text-gray-600">
+            <span className="font-semibold">{user.role.toUpperCase()}</span>
+            {user.role === "student" && user.studentId ? ` • ID: ${user.studentId}` : ""}
           </p>
-          <p className="text-sm text-gray-400 mb-2">{user.email}</p>
-          <button
-            onClick={() => setShowInfo((show) => !show)}
-            className="text-green-600 hover:underline text-sm"
-          >
-            {showInfo ? "Hide" : "Show"} Info
-          </button>
-          {showInfo && (
-            <ul className="mt-1 text-gray-700 text-xs">
-              {user.role === "profile" && user.department && (
-                <li>Department: {user.department}</li>
-              )}
-              <li>Joined: {user.joinDate}</li>
-              {user.studentId && <li>Student ID: {user.studentId}</li>}
-            </ul>
-          )}
+
+          <p className="text-gray-500 text-sm">{user.email}</p>
+
+          <p className="text-xs text-gray-400 mt-1">
+            Joined: {new Date(user.joinedAt).toDateString()}
+          </p>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-5 my-8">
-        <StatsCard
-          title="Courses"
-          value={stats?.totalCourses ?? 0}
-          color="#3b82f6"
-          icon="📚"
-        />
-        <StatsCard
-          title="Pending Assignments"
-          value={stats?.pendingAssignments ?? 0}
-          color="#f43f5e"
-          icon="📝"
-        />
-        <StatsCard
-          title="Avg Grade"
-          value={stats?.averageGrade ? `${stats.averageGrade}%` : "N/A"}
-          color="#22c55e"
-          icon="🏅"
-        />
-        <StatsCard
-          title="Overall Progress"
-          value={stats?.overallProgress ? `${stats.overallProgress}%` : "N/A"}
-          color="#f59e0b"
-          icon="📈"
-        />
+      {/* STATS */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 my-8">
+        <StatsCard title="Courses" value={stats?.totalCourses} color="#3b82f6" />
+        <StatsCard title="Pending" value={stats?.pendingAssignments} color="#ef4444" />
+        <StatsCard title="Avg Grade" value={stats?.averageGrade} color="#22c55e" />
+        <StatsCard title="Progress" value={stats?.overallProgress} color="#f59e0b" />
       </div>
 
-      {/* Enrolled Courses */}
-      <h2 className="text-xl font-semibold mb-3 text-green-700">
-        Enrolled Courses
-      </h2>
+      {/* COURSES */}
+      <h2 className="text-xl font-semibold text-green-700 mb-3">Enrolled Courses</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
-        {(!enrolledCourses || enrolledCourses.length === 0) && (
-          <div className="text-gray-400">No enrolled courses yet.</div>
+        {enrolledCourses.length === 0 && (
+          <p className="text-gray-500">No enrolled courses</p>
         )}
-        {enrolledCourses?.map?.((c) => (
-          <div
-            key={c._id}
-            className="bg-gray-50 rounded p-4 border border-green-100"
-          >
-            <div className="font-bold">{c.title}</div>
-            <div className="text-xs text-gray-600 mb-1">
-              Credits: {c.credits}
-            </div>
-            <div className="text-xs text-gray-600 mb-1">
-              Progress:{" "}
-              <span className="font-semibold text-blue-600">
-                {c.progress || 0}%
-              </span>
-            </div>
-            <div className="text-xs text-gray-500">
-              From {c.startDate} - {c.endDate}
-            </div>
+
+        {enrolledCourses.map((c) => (
+          <div key={c._id} className="p-4 bg-gray-50 border rounded-lg">
+            <h3 className="font-semibold">{c.title}</h3>
+            <p className="text-xs text-gray-600">Credits: {c.credits}</p>
           </div>
         ))}
       </div>
 
-      {/* Recent Grades */}
-      <h2 className="text-xl font-semibold mb-3 text-green-700">
-        Recent Grades
-      </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {(!recentGrades || recentGrades.length === 0) && (
-          <div className="text-gray-400">No grades yet.</div>
-        )}
-        {recentGrades?.map?.((g) => (
-          <div
-            key={g.id}
-            className="rounded bg-white p-4 border shadow-sm flex justify-between items-center"
-          >
-            <div>
-              <strong>{g.assignment} </strong>
-              <span className="text-gray-600">({g.course})</span>
+      {/* GRADES */}
+      <h2 className="text-xl font-semibold text-green-700 mb-3">Recent Grades</h2>
+      {recentGrades.length === 0 ? (
+        <p className="text-gray-500">No grades yet.</p>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {recentGrades.map((g, i) => (
+            <div
+              key={i}
+              className="p-4 bg-white border rounded-lg shadow-sm flex justify-between"
+            >
+              <div>
+                <strong>{g.assignmentTitle}</strong>
+                <p className="text-xs text-gray-500">{g.course}</p>
+              </div>
+              <span className="text-green-600 font-bold text-xl">{g.grade}</span>
             </div>
-            <span className="font-semibold text-green-600 text-xl">
-              {g.score}
-            </span>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function StatsCard({ title, value, color, icon }) {
+function StatsCard({ title, value, color }) {
   return (
-    <div
-      className="rounded-lg px-4 py-5 shadow text-center"
-      style={{ background: color + "18" }}
-    >
-      <div className="text-3xl mb-1" style={{ color }}>
-        {icon}
-      </div>
+    <div className="px-5 py-4 rounded-xl shadow-md text-center"
+         style={{ background: `${color}15` }}>
       <div className="text-xl font-bold" style={{ color }}>
-        {value}
+        {value ?? 0}
       </div>
-      <div className="text-xs opacity-70">{title}</div>
+      <p className="text-xs opacity-80">{title}</p>
     </div>
   );
 }

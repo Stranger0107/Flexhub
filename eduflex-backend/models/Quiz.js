@@ -1,4 +1,3 @@
-// eduflex-backend/models/Quiz.js
 const mongoose = require('mongoose');
 
 const quizSchema = new mongoose.Schema(
@@ -22,7 +21,7 @@ const quizSchema = new mongoose.Schema(
     submissions: [
       {
         student: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-        answers: [Number], // index of selected option
+        answers: [Number],
         score: Number,
         total: Number,
         submittedAt: { type: Date, default: Date.now },

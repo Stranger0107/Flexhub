@@ -612,6 +612,74 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  // =============================
+// 👤 USER PROFILE + DASHBOARD
+// =============================
+const loadUserProfile = useCallback(async () => {
+  try {
+    const { data } = await api.get('/auth/me', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    setUser(data);
+    localStorage.setItem('currentUser', JSON.stringify(data));
+    return data;
+
+  } catch (error) {
+    console.error("API: loadUserProfile failed", error);
+    return null;
+  }
+}, [token]);
+
+const fetchUserStats = useCallback(async () => {
+  try {
+    const { data } = await api.get('/student/dashboard', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return {
+      totalCourses: data.totalCourses,
+      pendingAssignments: data.pendingAssignments,
+      averageGrade: data.averageGrade,
+      overallProgress: data.overallProgress ?? 0,
+    };
+  } catch (error) {
+    console.error("API: fetchUserStats failed", error);
+    return {
+      totalCourses: 0,
+      pendingAssignments: 0,
+      averageGrade: 0,
+      overallProgress: 0,
+    };
+  }
+}, [token]);
+
+const fetchEnrolledCourses = useCallback(async () => {
+  try {
+    const { data } = await api.get('/student/courses', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return data;
+  } catch (error) {
+    console.error("API: fetchEnrolledCourses failed", error);
+    return [];
+  }
+}, [token]);
+
+const fetchRecentGrades = useCallback(async () => {
+  try {
+    const { data } = await api.get('/student/grades', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    return data.slice(0, 5); // last 5 grades
+
+  } catch (error) {
+    console.error("API: fetchRecentGrades failed", error);
+    return [];
+  }
+}, [token]);
+
+
 
   // =============================
   // 🌍 CONTEXT VALUE
@@ -652,6 +720,11 @@ export const AppProvider = ({ children }) => {
     createAssignment,
     fetchAssignmentById, // <-- Added
     deleteAssignment, // <-- Added
+    // PROFILE + DASHBOARD
+    loadUserProfile,
+    fetchUserStats,
+    fetchEnrolledCourses,
+    fetchRecentGrades,
     // ✅ QUIZZES
     createQuiz,
     fetchQuizzesForCourse,
